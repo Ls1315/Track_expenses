@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="記帳">
+<meta name="theme-color" content="#2f6f4f">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="stylesheet" href="style.css">
+<title>記帳</title>
+</head>
+<body>
+<main>
+  <!-- 記帳 -->
+  <section id="view-add" class="view active">
+    <div class="add-top">
+      <input type="date" id="add-date" aria-label="日期">
+      <div id="amount" class="amount">$0</div>
+    </div>
+    <input id="add-note" class="note" type="text" placeholder="備註（可不填，可用 #標籤）" autocomplete="off">
+    <div id="presets" class="presets"></div>
+    <p class="hint">輸入金額 → 點分類就儲存</p>
+    <div id="cat-grid" class="cat-grid"></div>
+    <div id="keypad" class="keypad">
+      <button data-k="1">1</button><button data-k="2">2</button><button data-k="3">3</button>
+      <button data-k="4">4</button><button data-k="5">5</button><button data-k="6">6</button>
+      <button data-k="7">7</button><button data-k="8">8</button><button data-k="9">9</button>
+      <button data-k="C" class="fn">C</button><button data-k="0">0</button><button data-k="B" class="fn" aria-label="刪除">⌫</button>
+    </div>
+  </section>
+
+  <!-- 明細 -->
+  <section id="view-list" class="view">
+    <div class="month-nav"><button data-m="-1">‹</button><span class="month-label"></span><button data-m="1">›</button></div>
+    <div id="list"></div>
+  </section>
+
+  <!-- 報表 -->
+  <section id="view-report" class="view">
+    <div class="month-nav"><button data-m="-1">‹</button><span class="month-label"></span><button data-m="1">›</button></div>
+    <div id="report"></div>
+  </section>
+
+  <!-- 設定 -->
+  <section id="view-settings" class="view">
+    <h2>分類</h2>
+    <ul id="cat-list" class="cat-list"></ul>
+    <button id="cat-add" class="btn">＋ 新增分類</button>
+    <h2>備份</h2>
+    <button id="export" class="btn">匯出 CSV</button>
+    <label class="btn">匯入 CSV<input id="import" type="file" accept=".csv,text/csv" hidden></label>
+    <p class="small">資料只存在這支手機上。建議每月匯出一次備份。</p>
+    <h2>儲存空間</h2>
+    <p id="persist-status" class="small"></p>
+    <p class="small">版本 <span id="version"></span></p>
+  </section>
+</main>
+
+<nav class="tabs">
+  <button data-view="add" class="active">記帳</button>
+  <button data-view="list">明細</button>
+  <button data-view="report">報表</button>
+  <button data-view="settings">設定</button>
+</nav>
+
+<dialog id="edit">
+  <form method="dialog" id="edit-form">
+    <h3>編輯</h3>
+    <label>金額<input name="amount" type="number" inputmode="numeric" min="1" step="1" required></label>
+    <label>分類<select name="category"></select></label>
+    <label>日期<input name="date" type="date" required></label>
+    <label>備註<input name="note" type="text"></label>
+    <div class="dialog-actions">
+      <button type="button" id="edit-delete" class="danger">刪除</button>
+      <span></span>
+      <button value="cancel" formnovalidate>取消</button>
+      <button value="save" class="primary">儲存</button>
+    </div>
+  </form>
+</dialog>
+
+<div id="toast" class="toast" hidden></div>
+<script type="module" src="app.js"></script>
+</body>
+</html>
