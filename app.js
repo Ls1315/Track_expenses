@@ -49,6 +49,9 @@ function dayLabel(date) {
 }
 function hasFamily() { return !!state.family; }
 function isMine(t) { return t.scope === 'me' || t.by === state.ctx.uid; }
+// 家庭帳顯示「誰記的」：優先用成員名單上目前的名字（改名後新舊紀錄一起更新），已離開的成員才用紀錄上存的名字
+function nameOf(t) { return state.family?.memberNames?.[t.by] || t.byName || '家人'; }
+function googleName() { return state.user?.displayName || '我'; }
 
 let toastTimer;
 function toast(html, onAction) {
@@ -96,7 +99,7 @@ function onUser(user) {
   state.my = state.fam = state.txs = [];
   if (!user) { gate('login'); return; }
   gate('loading');
-  state.ctx = { uid: user.uid, name: user.displayName || '我', familyId: null };
+  state.ctx = { uid: user.uid, name: googleName(), familyId: null };
 
   unsub.profile = store.watchProfile(user.uid, (p, meta) => {
     if (!p) {
@@ -113,6 +116,7 @@ function onUser(user) {
 function onProfile(p, meta) {
   const first = !state.profile;
   state.profile = p;
+  state.ctx.name = (typeof p.nickname === 'string' && p.nickname.trim()) || googleName();
   state.cats = Array.isArray(p.cats) ? p.cats : DEFAULT_CATS.slice();
   // 加入／建立家庭時，等伺服器確認寫入後才開始讀家庭帳，否則會被安全規則拒絕
   if ((p.familyId || null) !== state.ctx.familyId && !(p.familyId && meta.hasPendingWrites)) watchFamily(p.familyId || null);
@@ -228,7 +232,7 @@ function setScope(s) {
 // ---------- 明細 ----------
 function whoTag(t) {
   if (t.scope !== 'family') return '';
-  const who = t.by === state.ctx.uid ? '我' : (t.byName || '家人');
+  const who = t.by === state.ctx.uid ? '我' : nameOf(t);
   return `<span class="tag">家・${esc(who)}</span>`;
 }
 
@@ -269,7 +273,7 @@ function openEdit(id, scope) {
   const canMove = hasFamily() && isMine(t);
   $('#edit-scope').hidden = !canMove;
   f.scope.value = t.scope;
-  $('#edit-who').textContent = t.scope === 'family' && !isMine(t) ? `${t.byName || '家人'} 記的` : '';
+  $('#edit-who').textContent = t.scope === 'family' && !isMine(t) ? `${nameOf(t)} 記的` : '';
   const dlg = $('#edit');
   dlg.dataset.id = id;
   dlg.dataset.scope = scope;
@@ -301,7 +305,7 @@ function onEditDelete() {
   const t = findTx(dlg.dataset.id, dlg.dataset.scope);
   if (!t) { dlg.close(); return; }
   // 別人記的刪掉後無法復原（安全規則只允許建立自己名下的紀錄），先確認
-  if (!isMine(t) && !confirm(`這筆是 ${t.byName || '家人'} 記的，刪除後無法復原。確定刪除？`)) return;
+  if (!isMine(t) && !confirm(`這筆是 ${nameOf(t)} 記的，刪除後無法復原。確定刪除？`)) return;
   dlg.close('delete');
   save(store.delTx(t, state.ctx));
   const msg = `已刪除：${esc(t.category)} ${money(t.amount)}`;
@@ -332,7 +336,7 @@ function renderReport() {
   if (hasFamily() && state.filter === 'family') {
     const byWho = new Map();
     for (const t of txs) {
-      const who = t.by === state.ctx.uid ? '我' : (t.byName || '家人');
+      const who = t.by === state.ctx.uid ? '我' : nameOf(t);
       byWho.set(who, (byWho.get(who) || 0) + t.amount);
     }
     people = `<h3>誰記的</h3><ul class="bars">${[...byWho].sort((a, b) => b[1] - a[1]).map(([w, v]) => `
@@ -453,6 +457,17 @@ async function onCodeShare() {
   const text = `加入我的記帳家庭：打開記帳 App → 設定 → 用邀請碼加入，輸入 ${code}`;
   if (navigator.share) { try { await navigator.share({ text }); } catch (e) { /* 取消 */ } return; }
   try { await navigator.clipboard.writeText(code); toast('已複製邀請碼'); } catch (e) { prompt('邀請碼', code); }
+}
+
+function onMyRename(e) {
+  const input = prompt('我的名字（家庭帳會顯示給家人看）。清空則改回 Google 帳號名稱', state.ctx.name);
+  if (input === null) return;
+  const name = input.trim().slice(0, 20);
+  if (name === state.ctx.name) return;
+  busy(e.currentTarget, async () => {
+    await store.setMyName(state.ctx.uid, name, name || googleName(), state.family);
+    toast('已更新名字');
+  });
 }
 
 function onFamilyRename(e) {
@@ -619,6 +634,7 @@ function bind() {
   $('#family-create').addEventListener('click', onFamilyCreate);
   $('#family-join').addEventListener('click', onFamilyJoin);
   $('#family-rename').addEventListener('click', onFamilyRename);
+  $('#my-rename').addEventListener('click', onMyRename);
   $('#code-share').addEventListener('click', onCodeShare);
   $('#code-rotate').addEventListener('click', onCodeRotate);
   $('#family-leave').addEventListener('click', onFamilyLeave);

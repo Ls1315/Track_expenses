@@ -1,7 +1,7 @@
 // Firebase 資料層：登入、個人帳／家庭帳的讀寫、家庭建立與邀請碼
 //
 // Firestore 結構
-//   users/{uid}                 { cats: [...], familyId: string|null, scope: 'me'|'family' }   只有本人能讀寫
+//   users/{uid}                 { cats: [...], familyId: string|null, scope: 'me'|'family', nickname?: string }   只有本人能讀寫
 //   users/{uid}/tx/{id}         個人帳的交易                                                     只有本人能讀寫
 //   families/{fid}              { name, members: [uid], memberNames: {uid: 名稱}, inviteCode, joinedWith, createdAt }
 //   families/{fid}/tx/{id}      家庭帳的交易（多 by、byName 記錄是誰記的）                        只有成員能讀寫
@@ -166,6 +166,14 @@ export async function rotateCode(family) {
   b.update(doc(fs, 'families', family.id), { inviteCode: code });
   await b.commit();
   return code;
+}
+
+// 改自己的名字：存在個人設定（空字串＝用 Google 名稱）；有家庭的話同步更新成員名單上的名字
+export async function setMyName(uid, nickname, shown, family) {
+  const b = writeBatch(fs);
+  b.update(doc(fs, 'users', uid), { nickname });
+  if (family) b.update(doc(fs, 'families', family.id), { [`memberNames.${uid}`]: shown });
+  await b.commit();
 }
 
 export function renameFamily(family, name) { return updateDoc(doc(fs, 'families', family.id), { name }); }
