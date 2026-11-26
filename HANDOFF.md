@@ -5,7 +5,7 @@
 ## 目標
 自製 iPhone 記帳工具，免費、不上架。解決市售 App 的兩個痛點：記一筆太麻煩、分類／報表不合用。
 
-## 目前狀態：v0.2.0 家庭共用版（已推送、真機測試正常）；v0.3.0 UI 改版在 `ui-redesign` 分支（見下一步第 5 項）
+## 目前狀態：v0.2.0 家庭共用版已合併進 `main`（PR #1，2026-11-26）；v0.3.0 UI 改版經 PR #2 合併進 `main`，尚未真機測試（見下一步第 5 項）
 - 技術：PWA（純 HTML／JS，沒有編譯步驟）＋ Firebase（Firestore＋Authentication，Spark 免費方案）
 - Firebase SDK 13.4.0 放在 `vendor/firebase/`（從 npm 套件複製，讓離線快取能涵蓋）
 - 登入：Google（先試彈出視窗，被擋時改整頁跳轉）
@@ -25,10 +25,10 @@
 進度（2026-11-26）：Firebase 專案 `track-expenses-46a33` 已設定（Google 登入、Firestore Standard edition、已發布 firestore.rules）；`v0.2-family` 已推送；GitHub Pages 目前從 **`v0.2-family`** 部署，網址 https://ls1315.github.io/Track_expenses/ ；使用者在**平板的無痕瀏覽器**和 **iPhone 主畫面 App** 都登入成功。
 
 1. ~~在 iPhone 主畫面 App 測 Google 登入~~：**2026-11-26 使用者回報成功**
-0. **先到 Firebase 主控台重新發布 `firestore.rules`**（2026-11-26 改過，見上方）
+0. **先到 Firebase 主控台重新發布 `firestore.rules`**（2026-11-26 改過，見上方）。2026-11-26 使用者**不確定**是否已發布
 2. ~~測家庭功能：建立家庭 → 家人用邀請碼加入 → 互相看到「家庭共用」的紀錄；iPhone App 切到背景 → 另一帳號記一筆 → 切回來看是否自動出現~~：**2026-11-26 使用者回報全部正常**
 3. ~~有 v0.1 舊資料的話：v0.1 匯出 CSV → v0.2 匯入~~：**2026-11-26 使用者表示沒有要保留的 v0.1 資料，跳過**。（備註：Pages 已改發布 v0.2，v0.1 畫面打不開；v0.1 資料在裝置本機 IndexedDB `ledger`，v0.2 不會讀取。）家庭測試第二個帳號用使用者自己另一個 Google 帳號（無痕視窗）。
-4. 都沒問題後：開 PR 把 `v0.2-family` 合併進 `main`（推送／合併前先問使用者），再把 Pages 分支改回 `main`（記得按 Save，並到 Actions 確認有部署紀錄）
+4. ~~開 PR 把 `v0.2-family` 合併進 `main`~~：**2026-11-26 PR #1 已合併**。還要把 Pages 分支改回 `main`（記得按 Save，並到 Actions 確認有部署紀錄）——Claude 沒有權限讀 Pages 設定，是否已改**未確認**
 
 5. **UI 重新設計**（2026-11-26 使用者提出，排在合併 `main` 之後、開新對話、新分支做）
    - 使用者回答：記帳／明細／報表／設定**四頁都**覺得陽春、不直觀；風格想參考「**罐頭記帳**」App（App Store：apps.apple.com/app/id6447756224；2026-11-26 雲端環境的網路設定擋住 apps.apple.com，Claude 尚未看過此頁）
@@ -44,7 +44,8 @@
      - 底部分頁加圖示；其他頁的提示訊息移到分頁列上方，不再擋日期／月份
      - 分類圖示依**名稱關鍵字**自動對應（`icons.js` 的 `CAT_RULES`），對應不到用標籤圖示；底色依名稱固定挑 8 色之一（不同分類可能同色）。使用者**不能自選圖示**（要改資料結構，留待之後）
      - 測試：雲端容器用 Playwright 模擬 iPhone 13（淺色／深色），以假資料取代 Firebase，四頁與編輯視窗、記一筆、復原、⌫ 鍵、家庭篩選、無家庭、無資料，都沒有 JS 錯誤。**不是真的 iPhone、不是真的 Firebase**
-     - 下一步：使用者確認後推送 `ui-redesign`；PR #1 合併後再開 PR 合併進 `main`；之後在 iPhone 主畫面 App 實測（`CACHE` 已改成 `ledger-v4`，重開 App 一兩次才會更新）
+     - 2026-11-26：`ui-redesign` 已推送；PR #1 已合併；已開 PR #2（`ui-redesign` → `main`）並經使用者同意合併
+     - 下一步：Pages 確認從 `main` 部署 → 在 iPhone 主畫面 App 實測（`CACHE` 已改成 `ledger-v4`，重開 App 一兩次才會更新）
 
 注意：Google 登入畫面顯示的 `track-expenses-46a33.firebaseapp.com` 由專案 ID 決定，免費方案改不了；使用者已決定不處理。
 
