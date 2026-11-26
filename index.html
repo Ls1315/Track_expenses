@@ -7,7 +7,8 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="記帳">
-<meta name="theme-color" content="#2f6f4f">
+<meta name="theme-color" content="#faf6f0" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#1c1815" media="(prefers-color-scheme: dark)">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="stylesheet" href="style.css">
@@ -16,13 +17,14 @@
 <body>
 <!-- 登入前的畫面 -->
 <section id="gate" class="gate">
+  <div class="gate-logo" data-ic="pen"></div>
   <h1>記帳</h1>
   <div id="gate-setup" hidden>
     <p>還沒有設定 Firebase。</p>
     <p class="small">請依 README 的「Firebase 設定」步驟，把設定值貼進 <code>firebase-config.js</code>。</p>
   </div>
   <div id="gate-login" hidden>
-    <p>登入後，資料會存在雲端，可以在不同裝置、和家人共用。</p>
+    <p class="small">登入後，資料會存在雲端，可以在不同裝置、和家人共用。</p>
     <button id="login" class="btn primary">用 Google 登入</button>
   </div>
   <p id="gate-loading" hidden>載入中…</p>
@@ -32,81 +34,108 @@
 <main hidden>
   <!-- 記帳 -->
   <section id="view-add" class="view active">
-    <div class="add-top">
-      <input type="date" id="add-date" aria-label="日期">
-      <div id="amount" class="amount">$0</div>
+    <div class="add-head">
+      <label class="chip date-chip"><span data-ic="calendar"></span><input type="date" id="add-date" aria-label="日期"></label>
+      <div id="scope" class="seg" hidden>
+        <button data-s="me">只有我</button><button data-s="family">家庭共用</button>
+      </div>
     </div>
-    <div id="scope" class="seg" hidden>
-      <button data-s="me">只有我</button><button data-s="family">家庭共用</button>
-    </div>
-    <input id="add-note" class="note" type="text" placeholder="備註（可不填，可用 #標籤）" autocomplete="off">
     <div id="presets" class="presets"></div>
-    <p class="hint">輸入金額 → 點分類就儲存</p>
     <div id="cat-grid" class="cat-grid"></div>
-    <div id="keypad" class="keypad">
-      <button data-k="1">1</button><button data-k="2">2</button><button data-k="3">3</button>
-      <button data-k="4">4</button><button data-k="5">5</button><button data-k="6">6</button>
-      <button data-k="7">7</button><button data-k="8">8</button><button data-k="9">9</button>
-      <button data-k="C" class="fn">C</button><button data-k="0">0</button><button data-k="B" class="fn" aria-label="刪除">⌫</button>
+    <div class="add-panel">
+      <div class="entry">
+        <span class="entry-ic" data-ic="note"></span>
+        <input id="add-note" class="note" type="text" placeholder="備註（可不填，可用 #標籤）" autocomplete="off">
+        <div id="amount" class="amount">$0</div>
+      </div>
+      <p id="add-hint" class="hint">輸入金額 → 點分類就儲存</p>
+      <div id="keypad" class="keypad">
+        <button data-k="1">1</button><button data-k="2">2</button><button data-k="3">3</button>
+        <button data-k="4">4</button><button data-k="5">5</button><button data-k="6">6</button>
+        <button data-k="7">7</button><button data-k="8">8</button><button data-k="9">9</button>
+        <button data-k="C" class="fn">C</button><button data-k="0">0</button><button data-k="B" class="fn" aria-label="刪除" data-ic="back"></button>
+      </div>
     </div>
   </section>
 
   <!-- 明細 -->
   <section id="view-list" class="view">
-    <div class="month-nav"><button data-m="-1">‹</button><span class="month-label"></span><button data-m="1">›</button></div>
+    <div class="hero">
+      <div class="month-nav"><button data-m="-1" aria-label="上個月" data-ic="left"></button><span class="month-label"></span><button data-m="1" aria-label="下個月" data-ic="chevron"></button></div>
+      <div id="list-sum" class="hero-sum"></div>
+    </div>
     <div class="filter seg" hidden><button data-f="all">全部</button><button data-f="me">個人</button><button data-f="family">家庭</button></div>
     <div id="list"></div>
   </section>
 
   <!-- 報表 -->
   <section id="view-report" class="view">
-    <div class="month-nav"><button data-m="-1">‹</button><span class="month-label"></span><button data-m="1">›</button></div>
+    <div class="hero">
+      <div class="month-nav"><button data-m="-1" aria-label="上個月" data-ic="left"></button><span class="month-label"></span><button data-m="1" aria-label="下個月" data-ic="chevron"></button></div>
+    </div>
     <div class="filter seg" hidden><button data-f="all">全部</button><button data-f="me">個人</button><button data-f="family">家庭</button></div>
     <div id="report"></div>
   </section>
 
   <!-- 設定 -->
   <section id="view-settings" class="view">
+    <h1 class="page-title">設定</h1>
+
     <h2>帳號</h2>
-    <p id="account" class="small"></p>
-    <p><button id="my-rename" class="link">改我的名字</button></p>
-    <button id="logout" class="btn">登出</button>
+    <div class="card">
+      <div class="item static"><span class="item-ic" data-ic="user"></span><span class="item-text" id="account"></span></div>
+      <button id="my-rename" class="item"><span class="item-ic" data-ic="edit"></span><span class="item-text">改我的名字</span><span class="item-go" data-ic="chevron"></span></button>
+      <button id="logout" class="item"><span class="item-ic" data-ic="logout"></span><span class="item-text">登出</span><span class="item-go" data-ic="chevron"></span></button>
+    </div>
 
     <h2>家庭</h2>
-    <div id="family-none">
-      <p class="small">建立家庭後，記帳時可以選「家庭共用」，家人都看得到；「只有我」的紀錄家人看不到。</p>
-      <button id="family-create" class="btn">建立家庭</button>
-      <button id="family-join" class="btn">用邀請碼加入</button>
+    <div id="family-none" class="card">
+      <p class="card-note">建立家庭後，記帳時可以選「家庭共用」，家人都看得到；「只有我」的紀錄家人看不到。</p>
+      <button id="family-create" class="item"><span class="item-ic" data-ic="users"></span><span class="item-text">建立家庭</span><span class="item-go" data-ic="chevron"></span></button>
+      <button id="family-join" class="item"><span class="item-ic" data-ic="key"></span><span class="item-text">用邀請碼加入</span><span class="item-go" data-ic="chevron"></span></button>
     </div>
-    <div id="family-has" hidden>
-      <p><b id="family-name"></b> <button id="family-rename" class="link">改名</button></p>
+    <div id="family-has" class="card" hidden>
+      <div class="family-head">
+        <span class="item-ic" data-ic="users"></span>
+        <b id="family-name"></b>
+        <button id="family-rename" class="link">改名</button>
+      </div>
       <ul id="family-members" class="members"></ul>
-      <p class="small">邀請碼：<b id="invite-code" class="code"></b></p>
-      <button id="code-share" class="btn">分享邀請碼</button>
-      <button id="code-rotate" class="btn">換新的邀請碼</button>
-      <button id="family-leave" class="btn danger">離開家庭</button>
+      <div class="item static"><span class="item-ic" data-ic="key"></span><span class="item-text">邀請碼</span><b id="invite-code" class="code"></b></div>
+      <button id="code-share" class="item"><span class="item-ic" data-ic="share"></span><span class="item-text">分享邀請碼</span><span class="item-go" data-ic="chevron"></span></button>
+      <button id="code-rotate" class="item"><span class="item-ic" data-ic="refresh"></span><span class="item-text">換新的邀請碼</span><span class="item-go" data-ic="chevron"></span></button>
+      <button id="family-leave" class="item danger"><span class="item-ic" data-ic="logout"></span><span class="item-text">離開家庭</span><span class="item-go" data-ic="chevron"></span></button>
     </div>
 
     <h2>分類</h2>
-    <ul id="cat-list" class="cat-list"></ul>
-    <button id="cat-add" class="btn">＋ 新增分類</button>
+    <div class="card">
+      <ul id="cat-list" class="cat-list"></ul>
+      <button id="cat-add" class="item"><span class="item-ic" data-ic="plus"></span><span class="item-text">新增分類</span></button>
+    </div>
+    <p class="small pad">分類圖示會依名稱自動對應（例如含「餐」「飲料」「交通」），對應不到的用標籤圖示。</p>
+
     <h2>備份</h2>
-    <button id="export" class="btn">匯出 CSV</button>
-    <select id="import-scope" aria-label="匯入到" hidden>
-      <option value="me">匯入到：個人帳</option>
-      <option value="family">匯入到：家庭帳</option>
-    </select>
-    <label class="btn">匯入 CSV<input id="import" type="file" accept=".csv,text/csv" hidden></label>
-    <p class="small">匯出的是「明細」目前篩選看得到的紀錄。從 v0.1 搬資料：在舊版匯出 CSV，再在這裡匯入。</p>
-    <p class="small">版本 <span id="version"></span></p>
+    <div class="card">
+      <button id="export" class="item"><span class="item-ic" data-ic="download"></span><span class="item-text">匯出 CSV</span><span class="item-go" data-ic="chevron"></span></button>
+      <div class="item static" id="import-scope-row" hidden>
+        <span class="item-ic" data-ic="list"></span><span class="item-text">匯入到</span>
+        <select id="import-scope" aria-label="匯入到">
+          <option value="me">個人帳</option>
+          <option value="family">家庭帳</option>
+        </select>
+      </div>
+      <label class="item"><span class="item-ic" data-ic="upload"></span><span class="item-text">匯入 CSV</span><span class="item-go" data-ic="chevron"></span><input id="import" type="file" accept=".csv,text/csv" hidden></label>
+    </div>
+    <p class="small pad">匯出的是「明細」目前篩選看得到的紀錄。從 v0.1 搬資料：在舊版匯出 CSV，再在這裡匯入。</p>
+    <p class="small pad center">版本 <span id="version"></span></p>
   </section>
 </main>
 
 <nav class="tabs" hidden>
-  <button data-view="add" class="active">記帳</button>
-  <button data-view="list">明細</button>
-  <button data-view="report">報表</button>
-  <button data-view="settings">設定</button>
+  <button data-view="add" class="active"><span data-ic="pen"></span>記帳</button>
+  <button data-view="list"><span data-ic="list"></span>明細</button>
+  <button data-view="report"><span data-ic="pie"></span>報表</button>
+  <button data-view="settings"><span data-ic="gear"></span>設定</button>
 </nav>
 
 <dialog id="edit">
