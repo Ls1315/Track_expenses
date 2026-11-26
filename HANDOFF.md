@@ -20,9 +20,14 @@
 - 順手修掉 v0.1 的 bug：編輯視窗先按過「儲存」，下次按「刪除」會被當成儲存，把刪掉的紀錄寫回去
 
 ## 下一步
-1. ~~填入 `firebaseConfig`~~（已完成，專案 `track-expenses-46a33`）；使用者需確認主控台步驟 3～6（Google 登入、授權網域、建立 Firestore、發布 firestore.rules）都已做完
-2. 使用者確認後推送到 GitHub，開 GitHub Pages
-3. **在真的 iPhone 主畫面 App 測 Google 登入**：iOS 主畫面 App 裡彈出視窗和整頁跳轉登入是否可行**未驗證**；Safari 封鎖第三方儲存可能讓整頁跳轉登入失敗（App 在 github.io、登入頁在 firebaseapp.com 是不同網域）。失敗的話備案：改用 Firebase Hosting 部署（同網域）或其他登入方式
+進度（2026-11-26）：Firebase 專案 `track-expenses-46a33` 已設定（Google 登入、Firestore Standard edition、已發布 firestore.rules）；`v0.2-family` 已推送；GitHub Pages 目前從 **`v0.2-family`** 部署，網址 https://ls1315.github.io/Track_expenses/ ；使用者在**平板的無痕瀏覽器**登入成功。
+
+1. **在 iPhone「加入主畫面」後從圖示打開，測 Google 登入**（還沒測；主畫面 App 的登入是最大未知數）。失敗的備案：改用 Firebase Hosting 部署（同網域）
+2. 測家庭功能：建立家庭 → 家人用邀請碼加入 → 互相看到「家庭共用」的紀錄
+3. 有 v0.1 舊資料的話：v0.1 匯出 CSV → v0.2 匯入
+4. 都沒問題後：開 PR 把 `v0.2-family` 合併進 `main`（推送／合併前先問使用者），再把 Pages 分支改回 `main`（記得按 Save，並到 Actions 確認有部署紀錄）
+
+注意：Google 登入畫面顯示的 `track-expenses-46a33.firebaseapp.com` 由專案 ID 決定，免費方案改不了；使用者已決定不處理。
 
 ## 其他討論過、暫緩的事
 - **載具發票自動匯入**：財政部 API 要申請 AppID 和 APIKey，個人能不能申請**未確認**（可打 0800-521-988 問）。比較低成本的做法是確認電子發票平台能否匯出明細檔案，再寫匯入功能，這也還沒確認。
