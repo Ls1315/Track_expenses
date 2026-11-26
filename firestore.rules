@@ -1,0 +1,93 @@
+rules_version = '2';
+
+// 記帳 App v0.2 的 Firestore 安全規則
+// 把整份內容貼到 Firebase 主控台 → Firestore Database → 規則，按「發布」。
+// 原則：個人帳只有本人讀寫；家庭帳只有成員讀寫；其他一律拒絕。
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() { return request.auth != null; }
+    function me() { return request.auth.uid; }
+
+    // 交易內容檢查（個人帳和家庭帳共用）
+    function validTx(d) {
+      return d.keys().hasOnly(['amount', 'category', 'date', 'note', 'createdAt', 'by', 'byName'])
+        && d.amount is int && d.amount > 0 && d.amount < 100000000
+        && d.date is string && d.date.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
+        && d.category is string && d.category.size() > 0 && d.category.size() <= 30
+        && d.note is string && d.note.size() <= 500
+        && d.createdAt is int;
+    }
+
+    // ---------- 個人 ----------
+    match /users/{uid} {
+      allow read, write: if signedIn() && me() == uid;
+
+      match /tx/{id} {
+        allow read, delete: if signedIn() && me() == uid;
+        allow create, update: if signedIn() && me() == uid && validTx(request.resource.data);
+      }
+    }
+
+    // ---------- 家庭 ----------
+    match /families/{fid} {
+      function isMember() { return signedIn() && me() in resource.data.members; }
+      function changed() { return request.resource.data.diff(resource.data).affectedKeys(); }
+
+      allow get: if isMember();
+
+      // 建立：自己是唯一成員
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly(['name', 'members', 'memberNames', 'inviteCode', 'joinedWith', 'createdAt'])
+        && request.resource.data.members == [me()]
+        && request.resource.data.memberNames.keys().hasOnly([me()]);
+
+      allow update: if signedIn() && (
+        // 成員：改家庭名稱、換邀請碼、改自己的顯示名稱（成員名單不變，不能改別人的名字）
+        (isMember()
+          && request.resource.data.members == resource.data.members
+          && changed().hasOnly(['name', 'inviteCode', 'memberNames'])
+          && request.resource.data.memberNames.diff(resource.data.memberNames).affectedKeys().hasOnly([me()]))
+        // 成員：離開（只能移除自己）
+        || (isMember()
+          && request.resource.data.members == resource.data.members.removeAll([me()])
+          && changed().hasOnly(['members', 'memberNames'])
+          && request.resource.data.memberNames.diff(resource.data.memberNames).affectedKeys().hasOnly([me()]))
+        // 非成員：用正確的邀請碼加入（只能加入自己）
+        || (!(me() in resource.data.members)
+          && resource.data.inviteCode != ''
+          && request.resource.data.joinedWith == resource.data.inviteCode
+          && request.resource.data.members == resource.data.members.concat([me()])
+          && changed().hasOnly(['members', 'memberNames', 'joinedWith'])
+          && request.resource.data.memberNames.diff(resource.data.memberNames).affectedKeys().hasOnly([me()]))
+      );
+
+      allow delete: if false;
+
+      match /tx/{id} {
+        function member() {
+          return signedIn() && me() in get(/databases/$(database)/documents/families/$(fid)).data.members;
+        }
+        allow read, delete: if member();
+        allow create: if member() && validTx(request.resource.data) && request.resource.data.by == me();
+        // 任何成員都能修改，但不能改掉「誰記的」
+        allow update: if member() && validTx(request.resource.data) && request.resource.data.by == resource.data.by;
+      }
+    }
+
+    // ---------- 邀請碼 ----------
+    match /invites/{code} {
+      // 知道碼才能讀單筆；不能列出全部邀請碼
+      allow get: if signedIn();
+      allow list: if false;
+      // 只有該家庭成員能建立，而且必須是家庭目前（這次寫入之後）的邀請碼
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly(['familyId'])
+        && me() in getAfter(/databases/$(database)/documents/families/$(request.resource.data.familyId)).data.members
+        && getAfter(/databases/$(database)/documents/families/$(request.resource.data.familyId)).data.inviteCode == code;
+      allow delete: if signedIn()
+        && me() in get(/databases/$(database)/documents/families/$(resource.data.familyId)).data.members;
+      allow update: if false;
+    }
+  }
+}

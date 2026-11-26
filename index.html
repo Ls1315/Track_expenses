@@ -14,12 +14,30 @@
 <title>記帳</title>
 </head>
 <body>
-<main>
+<!-- 登入前的畫面 -->
+<section id="gate" class="gate">
+  <h1>記帳</h1>
+  <div id="gate-setup" hidden>
+    <p>還沒有設定 Firebase。</p>
+    <p class="small">請依 README 的「Firebase 設定」步驟，把設定值貼進 <code>firebase-config.js</code>。</p>
+  </div>
+  <div id="gate-login" hidden>
+    <p>登入後，資料會存在雲端，可以在不同裝置、和家人共用。</p>
+    <button id="login" class="btn primary">用 Google 登入</button>
+  </div>
+  <p id="gate-loading" hidden>載入中…</p>
+  <p id="gate-msg" class="small"></p>
+</section>
+
+<main hidden>
   <!-- 記帳 -->
   <section id="view-add" class="view active">
     <div class="add-top">
       <input type="date" id="add-date" aria-label="日期">
       <div id="amount" class="amount">$0</div>
+    </div>
+    <div id="scope" class="seg" hidden>
+      <button data-s="me">只有我</button><button data-s="family">家庭共用</button>
     </div>
     <input id="add-note" class="note" type="text" placeholder="備註（可不填，可用 #標籤）" autocomplete="off">
     <div id="presets" class="presets"></div>
@@ -36,31 +54,55 @@
   <!-- 明細 -->
   <section id="view-list" class="view">
     <div class="month-nav"><button data-m="-1">‹</button><span class="month-label"></span><button data-m="1">›</button></div>
+    <div class="filter seg" hidden><button data-f="all">全部</button><button data-f="me">個人</button><button data-f="family">家庭</button></div>
     <div id="list"></div>
   </section>
 
   <!-- 報表 -->
   <section id="view-report" class="view">
     <div class="month-nav"><button data-m="-1">‹</button><span class="month-label"></span><button data-m="1">›</button></div>
+    <div class="filter seg" hidden><button data-f="all">全部</button><button data-f="me">個人</button><button data-f="family">家庭</button></div>
     <div id="report"></div>
   </section>
 
   <!-- 設定 -->
   <section id="view-settings" class="view">
+    <h2>帳號</h2>
+    <p id="account" class="small"></p>
+    <p><button id="my-rename" class="link">改我的名字</button></p>
+    <button id="logout" class="btn">登出</button>
+
+    <h2>家庭</h2>
+    <div id="family-none">
+      <p class="small">建立家庭後，記帳時可以選「家庭共用」，家人都看得到；「只有我」的紀錄家人看不到。</p>
+      <button id="family-create" class="btn">建立家庭</button>
+      <button id="family-join" class="btn">用邀請碼加入</button>
+    </div>
+    <div id="family-has" hidden>
+      <p><b id="family-name"></b> <button id="family-rename" class="link">改名</button></p>
+      <ul id="family-members" class="members"></ul>
+      <p class="small">邀請碼：<b id="invite-code" class="code"></b></p>
+      <button id="code-share" class="btn">分享邀請碼</button>
+      <button id="code-rotate" class="btn">換新的邀請碼</button>
+      <button id="family-leave" class="btn danger">離開家庭</button>
+    </div>
+
     <h2>分類</h2>
     <ul id="cat-list" class="cat-list"></ul>
     <button id="cat-add" class="btn">＋ 新增分類</button>
     <h2>備份</h2>
     <button id="export" class="btn">匯出 CSV</button>
+    <select id="import-scope" aria-label="匯入到" hidden>
+      <option value="me">匯入到：個人帳</option>
+      <option value="family">匯入到：家庭帳</option>
+    </select>
     <label class="btn">匯入 CSV<input id="import" type="file" accept=".csv,text/csv" hidden></label>
-    <p class="small">資料只存在這支手機上。建議每月匯出一次備份。</p>
-    <h2>儲存空間</h2>
-    <p id="persist-status" class="small"></p>
+    <p class="small">匯出的是「明細」目前篩選看得到的紀錄。從 v0.1 搬資料：在舊版匯出 CSV，再在這裡匯入。</p>
     <p class="small">版本 <span id="version"></span></p>
   </section>
 </main>
 
-<nav class="tabs">
+<nav class="tabs" hidden>
   <button data-view="add" class="active">記帳</button>
   <button data-view="list">明細</button>
   <button data-view="report">報表</button>
@@ -73,7 +115,9 @@
     <label>金額<input name="amount" type="number" inputmode="numeric" min="1" step="1" required></label>
     <label>分類<select name="category"></select></label>
     <label>日期<input name="date" type="date" required></label>
-    <label>備註<input name="note" type="text"></label>
+    <label>備註<input name="note" type="text" maxlength="500"></label>
+    <label id="edit-scope">帳本<select name="scope"><option value="me">只有我</option><option value="family">家庭共用</option></select></label>
+    <p id="edit-who" class="small"></p>
     <div class="dialog-actions">
       <button type="button" id="edit-delete" class="danger">刪除</button>
       <span></span>
