@@ -44,6 +44,7 @@
 | `sw.js` | 離線快取（改了檔案要把 `CACHE` 版本號 +1） |
 | `manifest.webmanifest` | PWA 設定 |
 | `icons/` | App 圖示 |
+| `.nojekyll` | 空檔，讓 GitHub Pages 跳過 Jekyll、照原樣發布檔案 |
 | `README.md` | 功能、Firebase 設定步驟、部署與安裝說明 |
 | `HANDOFF.md` | 本交接摘要 |
 | `CLAUDE.md` | 給 Claude 的專案規則（禁止寫入機密、推送前先確認） |
