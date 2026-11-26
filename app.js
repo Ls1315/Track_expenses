@@ -89,12 +89,12 @@ function stopAll() {
   for (const k of Object.keys(unsub)) { if (unsub[k]) unsub[k](); unsub[k] = null; }
 }
 
-function onUser(user, initErr) {
+function onUser(user) {
   stopAll();
   state.user = user;
   state.profile = state.family = null;
   state.my = state.fam = state.txs = [];
-  if (!user) { gate('login', initErr ? '登入失敗：' + errMsg(initErr) : ''); return; }
+  if (!user) { gate('login'); return; }
   gate('loading');
   state.ctx = { uid: user.uid, name: user.displayName || '我', familyId: null };
 
@@ -640,8 +640,12 @@ async function init() {
   }
   if (!firebaseConfig) { gate('setup'); return; }
   gate('loading');
-  const initErr = await store.init(firebaseConfig);
-  store.onUser(user => onUser(user, initErr));
+  // 不等整頁跳轉登入的結果（要連網才會回來），否則離線時 App 會卡在載入中
+  const redirect = store.init(firebaseConfig);
+  store.onUser(user => onUser(user));
+  redirect.then(err => {
+    if (err && !state.user) $('#gate-msg').textContent = '登入失敗：' + errMsg(err);
+  });
 }
 
 init();
