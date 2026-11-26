@@ -43,10 +43,11 @@ service cloud.firestore {
         && request.resource.data.memberNames.keys().hasOnly([me()]);
 
       allow update: if signedIn() && (
-        // 成員：改家庭名稱、換邀請碼、改顯示名稱（成員名單不變）
+        // 成員：改家庭名稱、換邀請碼、改自己的顯示名稱（成員名單不變，不能改別人的名字）
         (isMember()
           && request.resource.data.members == resource.data.members
-          && changed().hasOnly(['name', 'inviteCode', 'memberNames']))
+          && changed().hasOnly(['name', 'inviteCode', 'memberNames'])
+          && request.resource.data.memberNames.diff(resource.data.memberNames).affectedKeys().hasOnly([me()]))
         // 成員：離開（只能移除自己）
         || (isMember()
           && request.resource.data.members == resource.data.members.removeAll([me()])
