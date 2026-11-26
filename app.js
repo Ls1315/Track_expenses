@@ -1,7 +1,8 @@
 import { firebaseConfig } from './firebase-config.js';
 import * as store from './store.js';
+import { icon, catIcon } from './icons.js';
 
-const VERSION = '0.2.0';
+const VERSION = '0.3.0';
 const DEFAULT_CATS = ['早餐', '午餐', '晚餐', '飲料', '零食', '交通', '日用品', '購物', '娛樂', '醫療', '房租', '水電', '電信', '其他'];
 
 const $ = sel => document.querySelector(sel);
@@ -47,6 +48,13 @@ function dayLabel(date) {
   const [y, m, d] = date.split('-').map(Number);
   return `${m}/${d}（${WEEK[new Date(y, m - 1, d).getDay()]}）`;
 }
+function dayTitle(date) {
+  const t = today();
+  const [y, m, d] = t.split('-').map(Number);
+  const yest = new Date(y, m - 1, d - 1);
+  const ys = `${yest.getFullYear()}-${pad(yest.getMonth() + 1)}-${pad(yest.getDate())}`;
+  return dayLabel(date) + (date === t ? ' 今天' : date === ys ? ' 昨天' : '');
+}
 function hasFamily() { return !!state.family; }
 function isMine(t) { return t.scope === 'me' || t.by === state.ctx.uid; }
 // 家庭帳顯示「誰記的」：優先用成員名單上目前的名字（改名後新舊紀錄一起更新），已離開的成員才用紀錄上存的名字
@@ -58,6 +66,9 @@ function toast(html, onAction) {
   const el = $('#toast');
   el.innerHTML = html + (onAction ? ' <button>復原</button>' : '');
   el.hidden = false;
+  // 記帳頁：浮在鍵盤區上方，避免擋到數字鍵；其他頁用 CSS 預設位置（底部分頁上方）
+  const panel = $('#view-add.active .add-panel');
+  el.style.bottom = panel ? `${window.innerHeight - panel.getBoundingClientRect().top + 10}px` : '';
   if (onAction) el.querySelector('button').onclick = () => { el.hidden = true; onAction(); };
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => { el.hidden = true; }, 4000);
@@ -196,8 +207,10 @@ function renderAdd() {
   $('#scope').hidden = !hasFamily();
   $$('#scope button').forEach(b => b.classList.toggle('active', b.dataset.s === state.scope));
 
+  $('#add-hint').textContent = amt ? '點分類就儲存' : '輸入金額 → 點分類就儲存';
+  $('#add-hint').classList.toggle('ready', amt > 0);
   $('#cat-grid').innerHTML = state.cats
-    .map(c => `<button data-cat="${esc(c)}" ${amt ? '' : 'disabled'}>${esc(c)}</button>`).join('');
+    .map(c => `<button data-cat="${esc(c)}" ${amt ? '' : 'disabled'}>${catIcon(c)}<span>${esc(c)}</span></button>`).join('');
 
   // 常用組合：自己近 90 天記過 ≥2 次的（分類, 金額），取前 6
   const since = Date.now() - 90 * 864e5;
@@ -210,7 +223,7 @@ function renderAdd() {
   const top = [...count].filter(([, n]) => n >= 2).sort((a, b) => b[1] - a[1]).slice(0, 6);
   $('#presets').innerHTML = top.map(([k]) => {
     const [c, a] = k.split('\u0000');
-    return `<button data-cat="${esc(c)}" data-amt="${a}">${esc(c)} ${money(Number(a))}</button>`;
+    return `<button data-cat="${esc(c)}" data-amt="${a}">${catIcon(c, 'sm')}${esc(c)} <b>${money(Number(a))}</b></button>`;
   }).join('');
   $('#presets').hidden = top.length === 0;
 }
@@ -236,22 +249,31 @@ function whoTag(t) {
   return `<span class="tag">家・${esc(who)}</span>`;
 }
 
+function emptyBox(text) {
+  return `<div class="empty">${icon('note')}<p>${text}</p></div>`;
+}
+
 function renderList() {
   const txs = visibleTx().filter(t => monthOf(t.date) === state.month)
     .sort((a, b) => b.date.localeCompare(a.date) || b.createdAt - a.createdAt);
-  if (!txs.length) { $('#list').innerHTML = '<p class="empty">這個月還沒有紀錄</p>'; return; }
+  const total = txs.reduce((s, t) => s + t.amount, 0);
+  $('#list-sum').innerHTML = `<small>本月支出</small><b>${money(total)}</b><small>${txs.length} 筆</small>`;
+  if (!txs.length) { $('#list').innerHTML = emptyBox('這個月還沒有紀錄'); return; }
   const byDay = new Map();
   for (const t of txs) {
     if (!byDay.has(t.date)) byDay.set(t.date, []);
     byDay.get(t.date).push(t);
   }
   $('#list').innerHTML = [...byDay].map(([date, list]) => `
-    <div class="day">
-      <div class="day-head"><span>${dayLabel(date)}</span><span>${money(list.reduce((s, t) => s + t.amount, 0))}</span></div>
+    <div class="day-head"><span>${dayTitle(date)}</span><span>${money(list.reduce((s, t) => s + t.amount, 0))}</span></div>
+    <div class="card day">
       ${list.map(t => `
         <button class="row" data-id="${esc(t.id)}" data-scope="${t.scope}">
-          <span class="row-cat">${esc(t.category)}</span>
-          <span class="row-note">${whoTag(t)}${esc(t.note)}</span>
+          ${catIcon(t.category)}
+          <span class="row-main">
+            <span class="row-cat">${esc(t.category)}</span>
+            ${t.note || t.scope === 'family' ? `<span class="row-note">${whoTag(t)}${esc(t.note)}</span>` : ''}
+          </span>
           <span class="row-amt">${money(t.amount)}</span>
         </button>`).join('')}
     </div>`).join('');
@@ -314,11 +336,35 @@ function onEditDelete() {
 }
 
 // ---------- 報表 ----------
+// 甜甜圈圖：前 5 名分類各一色，其餘合併成「其他」
+const CHART_SLICES = 5;
+function donut(rows, total) {
+  const top = rows.slice(0, CHART_SLICES);
+  const rest = rows.slice(CHART_SLICES).reduce((s, [, v]) => s + v, 0);
+  const parts = top.map(([c, v], i) => ({ label: c, v, cls: 'c' + i }));
+  if (rest) parts.push({ label: '其他分類', v: rest, cls: 'c9' });
+  let off = 0;
+  const arcs = parts.map(p => {
+    const len = p.v / total * 100;
+    // 每段留一點空隙（只有一段時不留）
+    const gap = parts.length > 1 ? Math.min(0.6, len / 3) : 0;
+    const el = `<circle class="${p.cls}" r="15.915" cx="21" cy="21" pathLength="100"
+      stroke-dasharray="${(len - gap).toFixed(3)} ${(100 - len + gap).toFixed(3)}" stroke-dashoffset="${(-off).toFixed(3)}"/>`;
+    off += len;
+    return el;
+  }).join('');
+  const legend = parts.map(p => `<li><i class="${p.cls}"></i><span>${esc(p.label)}</span><b>${Math.round(p.v / total * 100)}%</b></li>`).join('');
+  return { svg: `<svg class="donut" viewBox="0 0 42 42" aria-hidden="true"><g transform="rotate(-90 21 21)">${arcs}</g></svg>`, legend, colorOf: c => {
+    const i = top.findIndex(([x]) => x === c);
+    return i >= 0 ? 'c' + i : 'c9';
+  } };
+}
+
 function renderReport() {
   const all = visibleTx();
   const txs = all.filter(t => monthOf(t.date) === state.month);
   const total = txs.reduce((s, t) => s + t.amount, 0);
-  if (!txs.length) { $('#report').innerHTML = '<p class="empty">這個月還沒有紀錄</p>'; return; }
+  if (!txs.length) { $('#report').innerHTML = emptyBox('這個月還沒有紀錄'); return; }
 
   const sums = new Map();
   for (const t of txs) sums.set(t.category, (sums.get(t.category) || 0) + t.amount);
@@ -330,6 +376,8 @@ function renderReport() {
   const isThisMonth = state.month === monthOf(today());
   const days = isThisMonth ? new Date().getDate() : new Date(y, m, 0).getDate();
   const prev = all.filter(t => monthOf(t.date) === shiftMonth(state.month, -1)).reduce((s, t) => s + t.amount, 0);
+  const diff = total - prev;
+  const diffText = prev ? `比上月${diff >= 0 ? '多' : '少'} ${money(Math.abs(diff))}` : '上月沒有紀錄';
 
   // 家庭帳：各成員金額
   let people = '';
@@ -339,30 +387,37 @@ function renderReport() {
       const who = t.by === state.ctx.uid ? '我' : nameOf(t);
       byWho.set(who, (byWho.get(who) || 0) + t.amount);
     }
-    people = `<h3>誰記的</h3><ul class="bars">${[...byWho].sort((a, b) => b[1] - a[1]).map(([w, v]) => `
-      <li><div class="bar-label"><span>${esc(w)}</span><span>${money(v)}　${Math.round(v / total * 100)}%</span></div>
-      <div class="bar"><i style="width:${(v / total * 100).toFixed(1)}%"></i></div></li>`).join('')}</ul><h3>分類</h3>`;
+    people = `<h2>誰記的</h2><div class="card"><ul class="bars">${[...byWho].sort((a, b) => b[1] - a[1]).map(([w, v]) => `
+      <li><span class="cat-ic t0">${icon('user')}</span><div class="bar-body">
+        <div class="bar-label"><span>${esc(w)} <small>${Math.round(v / total * 100)}%</small></span><b>${money(v)}</b></div>
+        <div class="bar"><i style="width:${(v / total * 100).toFixed(1)}%"></i></div></div></li>`).join('')}</ul></div>`;
   }
 
+  const d = donut(rows, total);
   $('#report').innerHTML = `
-    <div class="stats">
-      <div><small>總支出</small><b>${money(total)}</b></div>
-      <div><small>日平均</small><b>${money(Math.round(total / days))}</b></div>
-      <div><small>上月</small><b>${money(prev)}</b></div>
+    <div class="card summary">
+      <small>總支出 · ${txs.length} 筆</small>
+      <div class="summary-total">${money(total)}</div>
+      <div class="summary-sub"><span>日平均 <b>${money(Math.round(total / days))}</b></span><span>${diffText}</span></div>
+    </div>
+    <div class="card chart">
+      <div class="donut-wrap">${d.svg}<div class="donut-center"><small>支出</small><b>${money(total)}</b></div></div>
+      <ul class="legend">${d.legend}</ul>
     </div>
     ${people}
-    <ul class="bars">
+    <h2>分類排行</h2>
+    <div class="card"><ul class="bars">
       ${rows.map(([c, v]) => `
-        <li>
-          <div class="bar-label"><span>${esc(c)}</span><span>${money(v)}　${Math.round(v / total * 100)}%</span></div>
-          <div class="bar"><i style="width:${(v / max * 100).toFixed(1)}%"></i></div>
-        </li>`).join('')}
-    </ul>`;
+        <li>${catIcon(c)}<div class="bar-body">
+          <div class="bar-label"><span>${esc(c)} <small>${Math.round(v / total * 100)}%</small></span><b>${money(v)}</b></div>
+          <div class="bar"><i class="${d.colorOf(c)}" style="width:${(v / max * 100).toFixed(1)}%"></i></div>
+        </div></li>`).join('')}
+    </ul></div>`;
 }
 
 // ---------- 設定 ----------
 function renderSettings() {
-  $('#account').textContent = `已登入：${state.ctx.name}`;
+  $('#account').innerHTML = `${esc(state.ctx.name)}<small>${esc(state.user?.email || '')}</small>`;
 
   // 家庭
   const f = state.family;
@@ -371,19 +426,20 @@ function renderSettings() {
   if (f) {
     $('#family-name').textContent = f.name;
     $('#family-members').innerHTML = f.members
-      .map(u => `<li>${esc(f.memberNames?.[u] || '成員')}${u === state.ctx.uid ? '（我）' : ''}</li>`).join('');
+      .map(u => `<li>${esc(f.memberNames?.[u] || '成員')}${u === state.ctx.uid ? '<small>我</small>' : ''}</li>`).join('');
     $('#invite-code').textContent = f.inviteCode ? f.inviteCode.replace(/(.{4})/, '$1-') : '—';
   }
-  $('#import-scope').hidden = !f;
+  $('#import-scope-row').hidden = !f;
   if (!f) $('#import-scope').value = 'me';
 
   $('#cat-list').innerHTML = state.cats.map((c, i) => `
     <li>
-      <span>${esc(c)}</span>
-      <button data-act="up" data-i="${i}" ${i === 0 ? 'disabled' : ''} aria-label="上移">↑</button>
-      <button data-act="down" data-i="${i}" ${i === state.cats.length - 1 ? 'disabled' : ''} aria-label="下移">↓</button>
-      <button data-act="rename" data-i="${i}">改名</button>
-      <button data-act="del" data-i="${i}" class="danger">刪除</button>
+      ${catIcon(c)}
+      <span class="cat-name">${esc(c)}</span>
+      <button data-act="up" data-i="${i}" ${i === 0 ? 'disabled' : ''} aria-label="上移">${icon('up')}</button>
+      <button data-act="down" data-i="${i}" ${i === state.cats.length - 1 ? 'disabled' : ''} aria-label="下移">${icon('down')}</button>
+      <button data-act="rename" data-i="${i}" aria-label="改名">${icon('edit')}</button>
+      <button data-act="del" data-i="${i}" class="danger" aria-label="刪除">${icon('trash')}</button>
     </li>`).join('');
   $('#version').textContent = VERSION;
 }
@@ -588,6 +644,7 @@ async function onImport(e) {
 
 // ---------- 導覽 ----------
 function show(view) {
+  $('#toast').style.bottom = ''; // 換頁後提示回到預設位置
   $$('.view').forEach(v => v.classList.toggle('active', v.id === 'view-' + view));
   $$('.tabs button').forEach(b => b.classList.toggle('active', b.dataset.view === view));
   if (view === 'add') $('#add-date').value = $('#add-date').value || today();
@@ -608,10 +665,10 @@ function renderAll() {
 
 function bind() {
   $$('.tabs button').forEach(b => b.addEventListener('click', () => show(b.dataset.view)));
-  $('#keypad').addEventListener('click', e => { const k = e.target.dataset.k; if (k) onKey(k); });
+  $('#keypad').addEventListener('click', e => { const k = e.target.closest('button')?.dataset.k; if (k) onKey(k); });
   $('#scope').addEventListener('click', e => { const s = e.target.dataset.s; if (s) setScope(s); });
   $('#cat-grid').addEventListener('click', e => {
-    const c = e.target.dataset.cat;
+    const c = e.target.closest('button')?.dataset.cat;
     if (c && Number(state.amount) > 0) addTx(c, Number(state.amount));
   });
   $('#presets').addEventListener('click', e => {
@@ -649,6 +706,7 @@ function bind() {
 }
 
 async function init() {
+  $$('[data-ic]').forEach(el => { el.innerHTML = icon(el.dataset.ic); });
   $('#add-date').value = today();
   bind();
   if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
