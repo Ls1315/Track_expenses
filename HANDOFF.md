@@ -20,9 +20,9 @@
 - 順手修掉 v0.1 的 bug：編輯視窗先按過「儲存」，下次按「刪除」會被當成儲存，把刪掉的紀錄寫回去
 
 ## 下一步
-進度（2026-11-26）：Firebase 專案 `track-expenses-46a33` 已設定（Google 登入、Firestore Standard edition、已發布 firestore.rules）；`v0.2-family` 已推送；GitHub Pages 目前從 **`v0.2-family`** 部署，網址 https://ls1315.github.io/Track_expenses/ ；使用者在**平板的無痕瀏覽器**登入成功。
+進度（2026-11-26）：Firebase 專案 `track-expenses-46a33` 已設定（Google 登入、Firestore Standard edition、已發布 firestore.rules）；`v0.2-family` 已推送；GitHub Pages 目前從 **`v0.2-family`** 部署，網址 https://ls1315.github.io/Track_expenses/ ；使用者在**平板的無痕瀏覽器**和 **iPhone 主畫面 App** 都登入成功。
 
-1. **在 iPhone「加入主畫面」後從圖示打開，測 Google 登入**（還沒測；主畫面 App 的登入是最大未知數）。失敗的備案：改用 Firebase Hosting 部署（同網域）
+1. ~~在 iPhone 主畫面 App 測 Google 登入~~：**2026-11-26 使用者回報成功**
 2. 測家庭功能：建立家庭 → 家人用邀請碼加入 → 互相看到「家庭共用」的紀錄
 3. 有 v0.1 舊資料的話：v0.1 匯出 CSV → v0.2 匯入
 4. 都沒問題後：開 PR 把 `v0.2-family` 合併進 `main`（推送／合併前先問使用者），再把 Pages 分支改回 `main`（記得按 Save，並到 Actions 確認有部署紀錄）
