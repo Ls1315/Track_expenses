@@ -43,3 +43,4 @@
 | `icons/` | App 圖示 |
 | `README.md` | 部署與安裝說明 |
 | `HANDOFF.md` | 本交接摘要 |
+| `CLAUDE.md` | 給 Claude 的專案規則（禁止寫入機密、推送前先確認） |
