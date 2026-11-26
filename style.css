@@ -110,3 +110,20 @@ dialog input, dialog select { display: block; width: 100%; margin-top: 4px; padd
   display: flex; gap: 12px; align-items: center; white-space: nowrap; }
 .toast[hidden] { display: none; }
 .toast button { border: none; background: none; color: #8fe0b0; font-weight: 600; padding: 0; }
+
+/* v0.2：登入畫面、個人／家庭切換、家庭設定 */
+[hidden] { display: none !important; }
+.gate { flex: 1; display: flex; flex-direction: column; justify-content: center; padding: 24px; text-align: center; }
+.gate h1 { margin: 0 0 16px; color: var(--accent); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.seg { display: flex; background: var(--line); border-radius: 9px; padding: 2px; flex-shrink: 0; }
+.seg button { flex: 1; border: none; background: none; border-radius: 7px; padding: 6px 0; font-size: 14px; color: var(--muted); }
+.seg button.active { background: var(--card); color: var(--accent); font-weight: 600; }
+.filter { margin-bottom: 10px; }
+.tag { font-size: 12px; color: var(--accent); background: var(--accent-soft); border-radius: 4px; padding: 1px 5px; margin-right: 6px; }
+#import-scope { display: block; width: 100%; margin-bottom: 8px; padding: 10px; border: 1px solid var(--line);
+  border-radius: 10px; background: var(--card); }
+.members { margin: 0 0 8px; padding-left: 20px; }
+.code { font-family: ui-monospace, Menlo, monospace; letter-spacing: 1px; color: var(--fg); }
+.link { border: none; background: none; color: var(--accent); font-size: 13px; padding: 0 4px; }
+h3 { font-size: 14px; color: var(--muted); margin: 12px 0 8px; }
