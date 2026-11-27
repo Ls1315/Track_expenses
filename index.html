@@ -110,9 +110,9 @@
     <h2>分類</h2>
     <div class="card">
       <ul id="cat-list" class="cat-list"></ul>
-      <button id="cat-add" class="item"><span class="item-ic" data-ic="plus"></span><span class="item-text">新增分類</span></button>
+      <button id="cat-add" class="item"><span class="item-ic" data-ic="plus"></span><span class="item-text">新增主分類</span></button>
     </div>
-    <p class="small pad">分類圖示會依名稱自動對應（例如含「餐」「飲料」「交通」），對應不到的用標籤圖示。</p>
+    <p class="small pad">點主分類右邊的 + 新增子分類；點分類名稱可以移到別的主分類底下。分類圖示會依名稱自動對應（例如含「餐」「飲料」「交通」），對應不到的用標籤圖示。</p>
 
     <h2>備份</h2>
     <div class="card">
@@ -127,6 +127,7 @@
       <label class="item"><span class="item-ic" data-ic="upload"></span><span class="item-text">匯入 CSV</span><span class="item-go" data-ic="chevron"></span><input id="import" type="file" accept=".csv,text/csv" hidden></label>
     </div>
     <p class="small pad">匯出的是「明細」目前篩選看得到的紀錄。從 v0.1 搬資料：在舊版匯出 CSV，再在這裡匯入。</p>
+    <p class="small pad">也可以匯入電子發票平台下載的「消費明細」CSV：一張發票記一筆（折扣、商品卡已扣除），分類依店家自動對應，對應不到的歸「未分類」；同一張發票重複匯入會略過。</p>
     <p class="small pad center">版本 <span id="version"></span></p>
   </section>
 </main>

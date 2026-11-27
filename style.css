@@ -88,6 +88,9 @@ h2 { font-size: 13px; font-weight: 600; color: var(--muted); margin: 18px 4px 8p
 .cat-grid button span:last-child { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cat-grid button:disabled { opacity: .55; cursor: default; }
 .cat-grid button:not(:disabled):active .cat-ic { transform: scale(.9); }
+.grid-head { grid-column: 1 / -1; margin: 10px 6px 2px; font-size: 12px; font-weight: 600; color: var(--muted); letter-spacing: .5px; }
+.grid-head:first-child { margin-top: 2px; }
+.grid-head:empty { height: 0; margin: 8px 6px 6px; border-top: 1px solid var(--line); }
 .add-panel { flex-shrink: 0; background: var(--panel); border-radius: 24px 24px 0 0; padding: 12px 12px 10px; }
 .entry { display: flex; align-items: center; gap: 8px; background: var(--card); border-radius: 16px; padding: 6px 14px 6px 12px; }
 .entry-ic { color: var(--muted); }
@@ -155,6 +158,17 @@ i.c3 { background: var(--c3); } i.c4 { background: var(--c4); } i.c9 { backgroun
 .bar-label b { font-variant-numeric: tabular-nums; font-weight: 600; }
 .bar { height: 6px; background: var(--bg); border-radius: 3px; overflow: hidden; }
 .bar i { display: block; height: 100%; background: var(--accent); border-radius: 3px; }
+.bars li.grp { cursor: pointer; }
+.grp-toggle { display: inline-flex; vertical-align: middle; color: var(--muted); transition: transform .15s; }
+.grp-toggle .ic { width: 15px; height: 15px; }
+.grp-toggle.open { transform: rotate(90deg); }
+.bars li.sub-bars { display: block; padding: 0 0 4px 40px; }
+.sub-bars .bars { padding: 0; }
+.sub-bars .bars li { padding: 6px 16px; }
+.sub-bars .cat-ic { width: 30px; height: 30px; border-radius: 9px; }
+.sub-bars .cat-ic .ic { width: 17px; height: 17px; }
+.sub-bars .bar-label { font-size: 14px; }
+.sub-bars .bar i { opacity: .6; }
 
 /* ---------- 設定 ---------- */
 .item { display: flex; align-items: center; gap: 12px; width: 100%; border: none; background: none; padding: 13px 16px;
@@ -187,6 +201,14 @@ button.item:active, label.item:active { background: var(--bg); }
 .cat-list button .ic { width: 19px; height: 19px; }
 .cat-list button:active { background: var(--bg); }
 .cat-list button:disabled { opacity: .25; }
+.cat-list li.sub { padding-left: 40px; }
+.cat-list li.sub::before { left: 92px; }
+.cat-list li.sub .cat-ic { width: 30px; height: 30px; border-radius: 9px; }
+.cat-list li.sub .cat-ic .ic { width: 17px; height: 17px; }
+/* 點名稱跳出原生選單（移到哪個主分類底下）：select 蓋在名稱上、透明 */
+.cat-name.movable { position: relative; display: inline-flex; align-items: center; gap: 2px; }
+.cat-name.movable .move-ic { width: 14px; height: 14px; flex-shrink: 0; color: var(--muted); }
+.cat-name.movable select { position: absolute; inset: 0; width: 100%; opacity: 0; font-size: 16px; }
 .cat-list + .item::before { content: ""; position: absolute; top: 0; left: 16px; right: 16px; border-top: 1px solid var(--line); }
 #account small { margin-top: 1px; }
 
