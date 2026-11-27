@@ -50,6 +50,7 @@ const PATHS = {
   back: '<path d="M21 6H9l-6 6 6 6h12z"/><path d="M12 9.5l5 5M17 9.5l-5 5"/>',
   calendar: '<rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4"/>',
   note: '<path d="M5 4h14v16H5z"/><path d="M8 9h8M8 13h8M8 17h5"/>',
+  folder: '<path d="M3 6.5A1.5 1.5 0 0 1 4.5 5H9l2 2.5h8.5A1.5 1.5 0 0 1 21 9v9.5a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 18.5z"/>',
 };
 
 export function icon(name, cls = '') {
@@ -69,7 +70,7 @@ const CAT_RULES = [
   ['bag', /購物|買|網購/],
   ['ticket', /娛樂|電影|遊戲|門票|休閒|唱歌/],
   ['med', /醫|藥|健康|診|保健|牙/],
-  ['house', /房|租|住|家具|貸/],
+  ['house', /房|租|住|居家|家具|貸/],
   ['bolt', /水電|電費|水費|瓦斯|帳單|繳費/],
   ['phone', /電信|手機|網路|通訊|訂閱/],
   ['paw', /寵物|貓|狗/],

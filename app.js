@@ -2,8 +2,18 @@ import { firebaseConfig } from './firebase-config.js';
 import * as store from './store.js';
 import { icon, catIcon } from './icons.js';
 
-const VERSION = '0.4.0';
-const DEFAULT_CATS = ['早餐', '午餐', '晚餐', '飲料', '零食', '交通', '日用品', '購物', '娛樂', '醫療', '房租', '水電', '電信', '其他'];
+const VERSION = '0.5.0';
+// 分類樹：主分類底下可以有子分類；主分類本身也能直接拿來記帳。
+// 存在 users/{uid}.catTree；同時寫一份平面清單到 cats，讓舊版 App 也讀得到。
+const DEFAULT_TREE = [
+  { name: '餐飲', subs: ['早餐', '午餐', '晚餐', '飲料', '零食'] },
+  { name: '交通', subs: [] },
+  { name: '居家', subs: ['房租', '水電', '電信'] },
+  { name: '購物', subs: ['日用品'] },
+  { name: '娛樂', subs: [] },
+  { name: '醫療', subs: [] },
+  { name: '其他', subs: [] },
+];
 
 const $ = sel => document.querySelector(sel);
 const $$ = sel => document.querySelectorAll(sel);
@@ -16,7 +26,10 @@ const state = {
   my: [],              // 個人帳交易
   fam: [],             // 家庭帳交易
   txs: [],             // my + fam
-  cats: [],
+  tree: [],            // 分類樹 [{ name, subs: [] }]
+  cats: [],            // 分類樹攤平（主分類、子分類…）
+  parent: new Map(),   // 子分類 → 主分類
+  open: new Set(),     // 報表展開的主分類
   scope: 'me',         // 記帳時存到哪本：'me' | 'family'
   filter: 'all',       // 明細／報表看哪些：'all' | 'me' | 'family'
   amount: '',          // 鍵盤輸入的數字字串
@@ -115,7 +128,7 @@ function onUser(user) {
   unsub.profile = store.watchProfile(user.uid, (p, meta) => {
     if (!p) {
       // 快取沒有不代表雲端沒有；確定雲端也沒有才建立
-      if (!meta.fromCache) save(store.createProfile(user.uid, { cats: DEFAULT_CATS.slice(), familyId: null, scope: 'me' }));
+      if (!meta.fromCache) save(store.createProfile(user.uid, { catTree: DEFAULT_TREE, cats: flatCats(DEFAULT_TREE), familyId: null, scope: 'me' }));
       return;
     }
     onProfile(p, meta);
@@ -128,7 +141,12 @@ function onProfile(p, meta) {
   const first = !state.profile;
   state.profile = p;
   state.ctx.name = (typeof p.nickname === 'string' && p.nickname.trim()) || googleName();
-  state.cats = Array.isArray(p.cats) ? p.cats : DEFAULT_CATS.slice();
+  const cats = Array.isArray(p.cats) ? p.cats.filter(c => typeof c === 'string') : flatCats(DEFAULT_TREE);
+  let tree = Array.isArray(p.catTree) ? cleanTree(p.catTree) : treeFromCats(cats);
+  // 舊版 App 只會改 cats：新增的分類補成主分類
+  const known = new Set(flatCats(tree));
+  tree = tree.concat(cats.filter(c => c && !known.has(c)).map(c => ({ name: c, subs: [] })));
+  setTree(tree);
   // 加入／建立家庭時，等伺服器確認寫入後才開始讀家庭帳，否則會被安全規則拒絕
   if ((p.familyId || null) !== state.ctx.familyId && !(p.familyId && meta.hasPendingWrites)) watchFamily(p.familyId || null);
   state.scope = p.scope === 'family' && p.familyId ? 'family' : 'me';
@@ -177,7 +195,52 @@ function visibleTx() {
   return state.txs.filter(t => t.scope === state.filter);
 }
 
-async function saveCats() { save(store.updateProfile(state.ctx.uid, { cats: state.cats })); }
+// ---------- 分類樹 ----------
+function flatCats(tree) { return tree.flatMap(g => [g.name, ...g.subs]); }
+
+// 從雲端讀到的資料不一定可靠：只留字串、去掉重複名稱
+function cleanTree(raw) {
+  const seen = new Set();
+  const ok = n => typeof n === 'string' && n.trim() && !seen.has(n) && seen.add(n);
+  const tree = [];
+  for (const g of raw) {
+    if (!g || !ok(g.name)) continue;
+    tree.push({ name: g.name, subs: (Array.isArray(g.subs) ? g.subs : []).filter(ok) });
+  }
+  return tree;
+}
+
+// 只有平面 cats 的舊資料：依預設分組歸到主分類底下，對應不到的當主分類，保留原本順序
+function treeFromCats(cats) {
+  const def = new Map(DEFAULT_TREE.flatMap(g => g.subs.map(c => [c, g.name])));
+  const tree = [], byName = new Map();
+  const group = n => {
+    if (!byName.has(n)) { const g = { name: n, subs: [] }; byName.set(n, g); tree.push(g); }
+    return byName.get(n);
+  };
+  for (const c of [...new Set(cats)]) {
+    const p = def.get(c);
+    if (p && !byName.has(c)) group(p).subs.push(c);
+    else group(c);
+  }
+  // 預設的主分類照預設順序排前面，其他（自己加的、匯入產生的）照原本順序接在後面
+  const rank = n => { const i = DEFAULT_TREE.findIndex(g => g.name === n); return i < 0 ? DEFAULT_TREE.length : i; };
+  tree.sort((a, b) => rank(a.name) - rank(b.name));
+  return cleanTree(tree);
+}
+
+function setTree(tree) {
+  state.tree = tree;
+  state.cats = flatCats(tree);
+  state.parent = new Map(tree.flatMap(g => g.subs.map(c => [c, g.name])));
+}
+
+function parentOf(cat) { return state.parent.get(cat) || cat; }
+
+function saveTree(tree) {
+  setTree(tree);
+  save(store.updateProfile(state.ctx.uid, { catTree: state.tree, cats: state.cats }));
+}
 
 function addTx(category, amount) {
   const tx = {
@@ -209,8 +272,20 @@ function renderAdd() {
 
   $('#add-hint').textContent = amt ? '點分類就儲存' : '輸入金額 → 點分類就儲存';
   $('#add-hint').classList.toggle('ready', amt > 0);
-  $('#cat-grid').innerHTML = state.cats
-    .map(c => `<button data-cat="${esc(c)}" ${amt ? '' : 'disabled'}>${catIcon(c)}<span>${esc(c)}</span></button>`).join('');
+  // 有子分類的主分類自成一段（小標題＋主分類＋子分類）；沒有子分類的接在一起，用分隔線隔開
+  const btn = c => `<button data-cat="${esc(c)}" ${amt ? '' : 'disabled'}>${catIcon(c)}<span>${esc(c)}</span></button>`;
+  let grid = '', loose = false;
+  for (const g of state.tree) {
+    if (g.subs.length) {
+      grid += `<h3 class="grid-head">${esc(g.name)}</h3>${btn(g.name)}${g.subs.map(btn).join('')}`;
+      loose = false;
+    } else {
+      if (!loose && grid) grid += '<h3 class="grid-head"></h3>';
+      grid += btn(g.name);
+      loose = true;
+    }
+  }
+  $('#cat-grid').innerHTML = grid;
 
   // 常用組合：自己近 90 天記過 ≥2 次的（分類, 金額），取前 6
   const since = Date.now() - 90 * 864e5;
@@ -285,8 +360,10 @@ function openEdit(id, scope) {
   const t = findTx(id, scope);
   if (!t) return;
   const f = $('#edit-form');
-  const cats = state.cats.includes(t.category) ? state.cats : [...state.cats, t.category];
-  f.category.innerHTML = cats.map(c => `<option>${esc(c)}</option>`).join('');
+  const opt = c => `<option>${esc(c)}</option>`;
+  f.category.innerHTML = state.tree.map(g => g.subs.length
+    ? `<optgroup label="${esc(g.name)}">${opt(g.name)}${g.subs.map(opt).join('')}</optgroup>` : opt(g.name)).join('')
+    + (state.cats.includes(t.category) ? '' : opt(t.category));
   f.amount.value = t.amount;
   f.category.value = t.category;
   f.date.value = t.date;
@@ -366,8 +443,15 @@ function renderReport() {
   const total = txs.reduce((s, t) => s + t.amount, 0);
   if (!txs.length) { $('#report').innerHTML = emptyBox('這個月還沒有紀錄'); return; }
 
-  const sums = new Map();
-  for (const t of txs) sums.set(t.category, (sums.get(t.category) || 0) + t.amount);
+  // 依主分類加總；展開時再看各子分類
+  const sums = new Map(), subSums = new Map();
+  for (const t of txs) {
+    const p = parentOf(t.category);
+    sums.set(p, (sums.get(p) || 0) + t.amount);
+    if (!subSums.has(p)) subSums.set(p, new Map());
+    const m = subSums.get(p);
+    m.set(t.category, (m.get(t.category) || 0) + t.amount);
+  }
   const rows = [...sums].sort((a, b) => b[1] - a[1]);
   const max = rows[0][1];
 
@@ -407,11 +491,20 @@ function renderReport() {
     ${people}
     <h2>分類排行</h2>
     <div class="card"><ul class="bars">
-      ${rows.map(([c, v]) => `
-        <li>${catIcon(c)}<div class="bar-body">
-          <div class="bar-label"><span>${esc(c)} <small>${Math.round(v / total * 100)}%</small></span><b>${money(v)}</b></div>
-          <div class="bar"><i class="${d.colorOf(c)}" style="width:${(v / max * 100).toFixed(1)}%"></i></div>
-        </div></li>`).join('')}
+      ${rows.map(([c, v]) => {
+        const subs = [...subSums.get(c)].sort((a, b) => b[1] - a[1]);
+        const canOpen = subs.length > 1 || subs[0][0] !== c;
+        const open = canOpen && state.open.has(c);
+        const bar = (name, label, val, cls, extra = '') => `
+          <li ${extra}>${catIcon(name)}<div class="bar-body">
+            <div class="bar-label"><span>${label} <small>${Math.round(val / total * 100)}%</small></span><b>${money(val)}</b></div>
+            <div class="bar"><i class="${cls}" style="width:${(val / max * 100).toFixed(1)}%"></i></div>
+          </div></li>`;
+        return bar(c, esc(c) + (canOpen ? `<span class="grp-toggle${open ? ' open' : ''}">${icon('chevron')}</span>` : ''), v, d.colorOf(c),
+            canOpen ? `class="grp" data-grp="${esc(c)}" role="button" aria-expanded="${open}"` : '')
+          + (open ? `<li class="sub-bars"><ul class="bars">${subs.map(([s, sv]) =>
+              bar(s, s === c ? `${esc(s)}（未細分）` : esc(s), sv, d.colorOf(c))).join('')}</ul></li>` : '');
+      }).join('')}
     </ul></div>`;
 }
 
@@ -432,49 +525,96 @@ function renderSettings() {
   $('#import-scope-row').hidden = !f;
   if (!f) $('#import-scope').value = 'me';
 
-  $('#cat-list').innerHTML = state.cats.map((c, i) => `
-    <li>
-      ${catIcon(c)}
-      <span class="cat-name">${esc(c)}</span>
-      <button data-act="up" data-i="${i}" ${i === 0 ? 'disabled' : ''} aria-label="上移">${icon('up')}</button>
-      <button data-act="down" data-i="${i}" ${i === state.cats.length - 1 ? 'disabled' : ''} aria-label="下移">${icon('down')}</button>
-      <button data-act="rename" data-i="${i}" aria-label="改名">${icon('edit')}</button>
-      <button data-act="del" data-i="${i}" class="danger" aria-label="刪除">${icon('trash')}</button>
-    </li>`).join('');
+  // 子分類、沒有子分類的主分類：點名稱可以選「移到哪個主分類底下」
+  const moveSel = (gi, si) => {
+    const cur = si < 0 ? -1 : gi;
+    const opts = [`<option value="-1" ${cur < 0 ? 'selected' : ''}>當主分類</option>`]
+      .concat(state.tree.map((g, j) => j === gi && si < 0 ? '' : `<option value="${j}" ${j === cur ? 'selected' : ''}>放到「${esc(g.name)}」底下</option>`));
+    return `<select data-gi="${gi}" data-si="${si}" aria-label="移動分類">${opts.join('')}</select>`;
+  };
+  const row = (name, gi, si, first, last, hasSubs) => `
+    <li class="${si >= 0 ? 'sub' : ''}">
+      ${catIcon(name)}
+      ${hasSubs ? `<span class="cat-name">${esc(name)}</span>`
+        : `<label class="cat-name movable">${esc(name)}${icon('folder', 'move-ic')}${moveSel(gi, si)}</label>`}
+      ${si < 0 ? `<button data-act="addsub" data-gi="${gi}" data-si="-1" aria-label="新增子分類">${icon('plus')}</button>` : ''}
+      <button data-act="up" data-gi="${gi}" data-si="${si}" ${first ? 'disabled' : ''} aria-label="上移">${icon('up')}</button>
+      <button data-act="down" data-gi="${gi}" data-si="${si}" ${last ? 'disabled' : ''} aria-label="下移">${icon('down')}</button>
+      <button data-act="rename" data-gi="${gi}" data-si="${si}" aria-label="改名">${icon('edit')}</button>
+      <button data-act="del" data-gi="${gi}" data-si="${si}" class="danger" aria-label="刪除">${icon('trash')}</button>
+    </li>`;
+  $('#cat-list').innerHTML = state.tree.map((g, gi) =>
+    row(g.name, gi, -1, gi === 0, gi === state.tree.length - 1, g.subs.length > 0)
+    + g.subs.map((c, si) => row(c, gi, si, si === 0, si === g.subs.length - 1, false)).join('')).join('');
   $('#version').textContent = VERSION;
 }
 
-async function onCatAction(act, i) {
-  const name = state.cats[i];
-  const cats = state.cats.slice();
+function cloneTree() { return state.tree.map(g => ({ name: g.name, subs: g.subs.slice() })); }
+
+function askCatName(title, old = '') {
+  const nn = (prompt(title, old) || '').trim().slice(0, 30);
+  if (!nn || nn === old) return '';
+  if (state.cats.includes(nn)) { alert('已有同名分類'); return ''; }
+  return nn;
+}
+
+function onCatAction(act, gi, si) {
+  const tree = cloneTree();
+  const list = si < 0 ? tree : tree[gi].subs;
+  const i = si < 0 ? gi : si;
+  const name = si < 0 ? tree[gi].name : tree[gi].subs[si];
   if (act === 'up' || act === 'down') {
     const j = act === 'up' ? i - 1 : i + 1;
-    [cats[i], cats[j]] = [cats[j], cats[i]];
+    [list[i], list[j]] = [list[j], list[i]];
+  } else if (act === 'addsub') {
+    const nn = askCatName(`在「${name}」底下新增子分類`);
+    if (!nn) return;
+    tree[gi].subs.push(nn);
   } else if (act === 'rename') {
-    const nn = (prompt('新名稱', name) || '').trim().slice(0, 30);
-    if (!nn || nn === name) return;
-    if (cats.includes(nn)) { alert('已有同名分類'); return; }
-    cats[i] = nn;
+    const nn = askCatName('新名稱', name);
+    if (!nn) return;
+    if (si < 0) tree[gi].name = nn; else tree[gi].subs[si] = nn;
     // 只改自己的紀錄（個人帳＋自己記的家庭帳），不動家人的
     const changed = state.txs.filter(t => t.category === name && isMine(t)).map(t => ({ ...t, category: nn }));
     if (changed.length) save(store.putMany(changed, state.ctx));
   } else if (act === 'del') {
     const used = state.txs.filter(t => t.category === name && isMine(t)).length;
-    const msg = used ? `「${name}」有 ${used} 筆紀錄，刪除分類後紀錄會保留原分類名稱。確定刪除？` : `確定刪除「${name}」？`;
+    const subs = si < 0 ? tree[gi].subs : [];
+    let msg = `確定刪除「${name}」？`;
+    if (used) msg += `\n有 ${used} 筆紀錄，刪除分類後紀錄會保留原分類名稱。`;
+    if (subs.length) msg += `\n底下的 ${subs.length} 個子分類（${subs.join('、')}）會變成主分類。`;
     if (!confirm(msg)) return;
-    cats.splice(i, 1);
+    if (si < 0) tree.splice(gi, 1, ...subs.map(c => ({ name: c, subs: [] })));
+    else tree[gi].subs.splice(si, 1);
   }
-  state.cats = cats;
-  saveCats();
+  saveTree(tree);
+  renderAll();
+}
+
+// 移動：to = -1 當主分類，否則放到 tree[to] 底下
+function onCatMove(gi, si, to) {
+  const tree = cloneTree();
+  let name;
+  if (si < 0) {
+    if (to < 0 || tree[gi].subs.length) return;
+    name = tree[gi].name;
+    tree.splice(gi, 1);
+    if (to > gi) to--;
+    tree[to].subs.push(name);
+  } else {
+    if (to === gi) return;
+    name = tree[gi].subs.splice(si, 1)[0];
+    if (to < 0) tree.splice(gi + 1, 0, { name, subs: [] });
+    else tree[to].subs.push(name);
+  }
+  saveTree(tree);
   renderAll();
 }
 
 function onCatAdd() {
-  const nn = (prompt('分類名稱') || '').trim().slice(0, 30);
+  const nn = askCatName('主分類名稱');
   if (!nn) return;
-  if (state.cats.includes(nn)) { alert('已有同名分類'); return; }
-  state.cats = [...state.cats, nn];
-  saveCats();
+  saveTree([...cloneTree(), { name: nn, subs: [] }]);
   renderAll();
 }
 
@@ -636,7 +776,7 @@ async function onImport(e) {
 
 async function saveImported(list, where) {
   const newCats = [...new Set(list.map(t => t.category))].filter(c => !state.cats.includes(c));
-  if (newCats.length) { state.cats = [...state.cats, ...newCats]; saveCats(); }
+  if (newCats.length) saveTree([...cloneTree(), ...newCats.map(c => ({ name: c, subs: [] }))]);
   toast(`匯入中…（${list.length} 筆）`);
   try {
     await store.putMany(list, state.ctx);
@@ -766,7 +906,20 @@ function bind() {
   $('#list').addEventListener('click', e => { const r = e.target.closest('.row'); if (r) openEdit(r.dataset.id, r.dataset.scope); });
   $('#edit').addEventListener('close', onEditClose);
   $('#edit-delete').addEventListener('click', onEditDelete);
-  $('#cat-list').addEventListener('click', e => { const b = e.target.closest('button'); if (b) onCatAction(b.dataset.act, Number(b.dataset.i)); });
+  $('#cat-list').addEventListener('click', e => {
+    const b = e.target.closest('button');
+    if (b) onCatAction(b.dataset.act, Number(b.dataset.gi), Number(b.dataset.si));
+  });
+  $('#cat-list').addEventListener('change', e => {
+    const sel = e.target.closest('select');
+    if (sel) onCatMove(Number(sel.dataset.gi), Number(sel.dataset.si), Number(sel.value));
+  });
+  $('#report').addEventListener('click', e => {
+    const g = e.target.closest('[data-grp]')?.dataset.grp;
+    if (!g) return;
+    if (state.open.has(g)) state.open.delete(g); else state.open.add(g);
+    renderReport();
+  });
   $('#cat-add').addEventListener('click', onCatAdd);
   $('#family-create').addEventListener('click', onFamilyCreate);
   $('#family-join').addEventListener('click', onFamilyJoin);
