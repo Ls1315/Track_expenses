@@ -2,7 +2,7 @@ import { firebaseConfig } from './firebase-config.js';
 import * as store from './store.js';
 import { icon, catIcon } from './icons.js';
 
-const VERSION = '0.3.0';
+const VERSION = '0.4.0';
 const DEFAULT_CATS = ['早餐', '午餐', '晚餐', '飲料', '零食', '交通', '日用品', '購物', '娛樂', '醫療', '房租', '水電', '電信', '其他'];
 
 const $ = sel => document.querySelector(sel);
@@ -604,6 +604,7 @@ async function onImport(e) {
   const scope = hasFamily() ? $('#import-scope').value : 'me';
   const rows = parseCSV(await f.text());
   const head = (rows.shift() || []).map(h => h.trim());
+  if (head.includes('發票號碼') && head.includes('發票日期')) return importInvoices(head, rows, scope);
   const idx = Object.fromEntries(CSV_COLS.map(c => [c, head.indexOf(c)]));
   if (idx.date < 0 || idx.amount < 0 || idx.category < 0) { alert('CSV 格式不符：至少需要 date、amount、category 欄位'); return; }
 
@@ -630,6 +631,10 @@ async function onImport(e) {
   const where = scope === 'family' ? '家庭帳' : '個人帳';
   if (!confirm(`將匯入 ${list.length} 筆到「${where}」（新增 ${added}、覆蓋同 id ${list.length - added}）${bad ? `，略過 ${bad} 筆格式錯誤` : ''}。繼續？`)) return;
 
+  await saveImported(list, where);
+}
+
+async function saveImported(list, where) {
   const newCats = [...new Set(list.map(t => t.category))].filter(c => !state.cats.includes(c));
   if (newCats.length) { state.cats = [...state.cats, ...newCats]; saveCats(); }
   toast(`匯入中…（${list.length} 筆）`);
@@ -640,6 +645,81 @@ async function onImport(e) {
     console.error(err);
     alert('匯入失敗：' + errMsg(err));
   }
+}
+
+// ---------- 電子發票（財政部電子發票整合服務平台「消費明細」CSV） ----------
+// 每行是一個品項，折扣／優惠券／商品卡是負數的行；同一張發票加總成一筆。
+// 店家 → 分類：依賣方名稱關鍵字，由上往下第一個符合的為準；都不符合歸「未分類」。
+const STORE_RULES = [
+  ['電信', /中華電信|台灣大哥大|遠傳|台灣之星|亞太電信|電信/],
+  ['飲料', /星巴克|統一星巴克|路易莎|伯朗|清心|五十嵐|迷客夏|可不可|CoCo|茶湯會|大苑子|萬波|得正|麻古/i],
+  ['餐飲', /統一超商|全家便利|萊爾富|來來超商|OK便利|麥當勞|肯德基|摩斯|漢堡王|頂呱呱|餐廳|餐飲|美食|小吃|便當|早餐/],
+  ['日用品', /全聯|家樂福|好市多|大潤發|愛買|美廉社|屈臣氏|康是美|寶雅|小北百貨|生活工場|宜得利/],
+  ['購物', /蝦皮|富邦媒體|網路家庭|博客來|酷澎|露天|東森得易購|優美加|百貨|三創|燦坤|全國電子|順發/],
+  ['交通', /中油|台灣中油|台塑石化|全國加油|高速鐵路|台灣鐵路|臺灣鐵路|捷運|悠遊卡|一卡通|停車|客運|計程/],
+  ['醫療', /醫院|診所|藥局|藥房|大樹|杏一|丁丁|躍獅|長庚|牙醫/],
+  ['水電', /台灣電力|台灣自來水|臺北自來水|自來水|瓦斯|天然氣/],
+  ['娛樂', /威秀|國賓影城|秀泰|新光影城|錢櫃|好樂迪/],
+];
+
+function storeCategory(seller) {
+  const hit = STORE_RULES.find(([, re]) => re.test(seller));
+  return hit ? hit[0] : '未分類';
+}
+
+// 「統一超商股份有限公司台北市第五十四門市」→「統一超商」
+function shortSeller(name) {
+  // 外商開頭「新加坡商蝦皮…」也去掉國名
+  return name.replace(/(股份)?有限公司.*$/, '').replace(/^(新加坡|香港|英屬維京群島|英屬蓋曼群島|開曼群島|薩摩亞|美|日|韓|英|德|法|荷蘭|瑞士|盧森堡)商/, '').trim() || name;
+}
+
+async function importInvoices(head, rows, scope) {
+  const col = n => head.indexOf(n);
+  const c = { date: col('發票日期'), no: col('發票號碼'), status: col('發票狀態'), seller: col('賣方名稱'),
+              amt: col('消費明細_金額'), invAmt: col('發票金額'), item: col('消費明細_品名') };
+  if (c.seller < 0 || (c.amt < 0 && c.invAmt < 0)) { alert('電子發票 CSV 缺少「賣方名稱」或金額欄位'); return; }
+
+  const invs = new Map();
+  for (const r of rows) {
+    const no = (r[c.no] || '').trim();
+    const d = (r[c.date] || '').trim();
+    if (!no || !/^\d{8}$/.test(d)) continue; // 檔尾的說明文字
+    if (c.status >= 0 && /作廢/.test(r[c.status] || '')) continue;
+    const date = `${d.slice(0, 4)}-${d.slice(4, 6)}-${d.slice(6, 8)}`;
+    const key = `inv-${d}-${no}`.replace(/\//g, '_');
+    let inv = invs.get(key);
+    if (!inv) invs.set(key, inv = { id: key, date, seller: (r[c.seller] || '').trim(), total: 0, items: [] });
+    const amt = Number(r[c.amt >= 0 ? c.amt : c.invAmt]);
+    if (Number.isFinite(amt)) inv.total += amt;
+    const name = c.item >= 0 ? (r[c.item] || '').trim() : '';
+    if (name && amt > 0) inv.items.push(name);
+  }
+
+  const existing = new Set(state.txs.filter(t => t.scope === scope).map(t => t.id));
+  const list = [];
+  let skipped = 0, bad = 0, i = 0;
+  for (const inv of invs.values()) {
+    const amount = Math.round(inv.total);
+    if (!(amount > 0 && amount < 1e8)) { bad++; continue; } // 加總 ≤ 0（退貨、全額折抵）
+    if (existing.has(inv.id)) { skipped++; continue; }      // 已匯入過：不覆蓋，保留手動改過的分類
+    const shop = shortSeller(inv.seller);
+    const t = {
+      id: inv.id, scope, date: inv.date, amount,
+      category: storeCategory(inv.seller),
+      note: (inv.items.length ? `${shop}：${inv.items.join('、')}` : shop).slice(0, 500),
+      createdAt: Date.now() + i++,
+    };
+    if (scope === 'family') { t.by = state.ctx.uid; t.byName = state.ctx.name; }
+    list.push(t);
+  }
+
+  const where = scope === 'family' ? '家庭帳' : '個人帳';
+  const extra = [skipped && `${skipped} 張已匯入過`, bad && `${bad} 張金額 ≤ 0`].filter(Boolean).join('、');
+  if (!list.length) { alert(`沒有可匯入的發票${extra ? `（略過：${extra}）` : ''}`); return; }
+  const unc = list.filter(t => t.category === '未分類').length;
+  if (!confirm(`電子發票：將匯入 ${list.length} 張到「${where}」，一張發票記一筆（折扣、商品卡已扣除）`
+    + `${unc ? `，其中 ${unc} 張歸「未分類」` : ''}${extra ? `；略過 ${extra}` : ''}。繼續？`)) return;
+  await saveImported(list, where);
 }
 
 // ---------- 導覽 ----------
