@@ -9,11 +9,12 @@ const DEFAULT_TREE = [
   { name: '餐飲', subs: ['早餐', '午餐', '晚餐', '飲料', '零食'] },
   { name: '交通', subs: [] },
   { name: '居家', subs: ['房租', '水電', '電信'] },
-  { name: '購物', subs: ['日用品'] },
+  { name: '購物', subs: ['日用品', '衣服', '飾品', '美妝保養', '3C 家電'] },
   { name: '娛樂', subs: [] },
   { name: '醫療', subs: [] },
   { name: '其他', subs: [] },
 ];
+const NEW_SUBS = ['衣服', '飾品', '美妝保養', '3C 家電'];
 
 const $ = sel => document.querySelector(sel);
 const $$ = sel => document.querySelectorAll(sel);
@@ -222,6 +223,10 @@ function treeFromCats(cats) {
     const p = def.get(c);
     if (p && !byName.has(c)) group(p).subs.push(c);
     else group(c);
+  }
+  // v0.5 新增的預設子分類：舊帳號沒有的話補上
+  for (const g of DEFAULT_TREE) for (const c of g.subs) {
+    if (NEW_SUBS.includes(c) && !byName.has(c) && !tree.some(x => x.subs.includes(c))) group(g.name).subs.push(c);
   }
   // 預設的主分類照預設順序排前面，其他（自己加的、匯入產生的）照原本順序接在後面
   const rank = n => { const i = DEFAULT_TREE.findIndex(g => g.name === n); return i < 0 ? DEFAULT_TREE.length : i; };
