@@ -63,7 +63,7 @@
    - 資料：每筆紀錄仍只存一個 `category`（子分類或主分類名稱），**紀錄不用轉換**；分類樹存在 `users/{uid}.catTree`（`[{ name, subs: [] }]`），同時寫平面 `cats` 給舊版 App。沒有 `catTree` 的舊帳號依預設分組自動歸類（預設主分類照預設順序，自己加的、匯入產生的如「未分類」接在後面當主分類），**要等使用者第一次改分類才會寫回雲端**。舊版 App 新增的分類會補成主分類
    - 設定頁：主分類右邊 + 新增子分類；點分類名稱（有資料夾小圖示）跳出選單，移到別的主分類底下或改回主分類；刪除有子分類的主分類時，子分類變成主分類
    - 測試：雲端容器用 Playwright 模擬 iPhone 13，以假資料層取代 Firebase，20 項（舊資料轉換、記帳、報表展開收合、編輯視窗分組、新增／移動／改名／同名／刪除／排序、重新載入、新帳號、舊版補分類）全過、沒有 JS 錯誤。**不是真的 Firebase、不是真機**。測試腳本沒放進 repo
-   - 進度：在 `category-groups` 分支（從 `invoice-import` 開出），`CACHE` → `ledger-v6`、版本 0.5.0。**尚未推送**
+   - 進度：在 `category-groups` 分支（從 `invoice-import` 開出），`CACHE` → `ledger-v6`、版本 0.5.0。2026-11-27 **已推送**，尚未開 PR；`invoice-import` 的 commit 也包含在內，合併 `category-groups` 就會兩個一起進 `main`
 
 注意：Google 登入畫面顯示的 `track-expenses-46a33.firebaseapp.com` 由專案 ID 決定，免費方案改不了；使用者已決定不處理。
 
