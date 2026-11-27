@@ -2,7 +2,7 @@ import { firebaseConfig } from './firebase-config.js';
 import * as store from './store.js';
 import { icon, catIcon } from './icons.js';
 
-const VERSION = '0.5.0';
+const VERSION = '0.6.0';
 // 分類樹：主分類底下可以有子分類；主分類本身也能直接拿來記帳。
 // 存在 users/{uid}.catTree；同時寫一份平面清單到 cats，讓舊版 App 也讀得到。
 const DEFAULT_TREE = [
@@ -34,7 +34,10 @@ const state = {
   scope: 'me',         // 記帳時存到哪本：'me' | 'family'
   filter: 'all',       // 明細／報表看哪些：'all' | 'me' | 'family'
   amount: '',          // 鍵盤輸入的數字字串
-  month: monthOf(today()), // 明細／報表目前看的月份 'YYYY-MM'
+  month: monthOf(today()), // 明細目前看的月份 'YYYY-MM'；報表「月」「近半年」也用它
+  range: 'month',      // 報表期間：'month' | 'year' | 'half' | 'custom'
+  year: Number(today().slice(0, 4)),
+  from: '', to: '',    // 自訂期間（含頭尾）
 };
 const unsub = { profile: null, my: null, family: null, fam: null };
 
@@ -50,6 +53,20 @@ function shiftMonth(ym, delta) {
   const d = new Date(y, m - 1 + delta, 1);
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}`;
 }
+function lastDay(ym) {
+  const [y, m] = ym.split('-').map(Number);
+  return `${ym}-${pad(new Date(y, m, 0).getDate())}`;
+}
+function daysBetween(a, b) { // 含頭尾的天數
+  const t = s => { const [y, m, d] = s.split('-').map(Number); return Date.UTC(y, m - 1, d); };
+  return Math.round((t(b) - t(a)) / 864e5) + 1;
+}
+function monthsIn(from, to) {
+  const out = [];
+  for (let ym = monthOf(from); ym <= monthOf(to); ym = shiftMonth(ym, 1)) out.push(ym);
+  return out;
+}
+function ymLabel(ym) { const [y, m] = ym.split('-'); return `${y}/${Number(m)}`; }
 function money(n) { return '$' + n.toLocaleString('zh-TW'); }
 function uid() {
   return crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2);
@@ -442,11 +459,45 @@ function donut(rows, total) {
   } };
 }
 
+// 報表期間 → { from, to, label, prev: { from, to, name } | null, monthly }
+function reportRange() {
+  const t = today();
+  if (state.range === 'year') {
+    const y = state.year;
+    return { from: `${y}-01-01`, to: `${y}-12-31`, label: `${y} 年`, unit: '年',
+      prev: { from: `${y - 1}-01-01`, to: `${y - 1}-12-31`, name: '去年' }, monthly: true };
+  }
+  if (state.range === 'half') {
+    const a = shiftMonth(state.month, -5), pa = shiftMonth(state.month, -11), pb = shiftMonth(state.month, -6);
+    return { from: `${a}-01`, to: lastDay(state.month), label: `${ymLabel(a)} – ${ymLabel(state.month)}`, unit: '半年',
+      prev: { from: `${pa}-01`, to: lastDay(pb), name: '前半年' }, monthly: true };
+  }
+  if (state.range === 'custom') {
+    let from = state.from || `${state.month}-01`, to = state.to || t;
+    if (from > to) [from, to] = [to, from];
+    return { from, to, label: `${from.replace(/-/g, '/')} – ${to.replace(/-/g, '/')}`, unit: '期間', prev: null, monthly: monthOf(from) !== monthOf(to) };
+  }
+  return { from: `${state.month}-01`, to: lastDay(state.month), label: `${state.month.slice(0, 4)} 年 ${Number(state.month.slice(5))} 月`, unit: '月',
+    prev: { from: `${shiftMonth(state.month, -1)}-01`, to: lastDay(shiftMonth(state.month, -1)), name: '上月' }, monthly: false };
+}
+
+function renderReportHead() {
+  const r = reportRange();
+  $$('#range-mode button').forEach(b => b.classList.toggle('active', b.dataset.r === state.range));
+  $('#report-nav').hidden = state.range === 'custom';
+  $('#range-custom').hidden = state.range !== 'custom';
+  $('#report-label').textContent = r.label;
+  if (state.range === 'custom') { $('#range-from').value = r.from; $('#range-to').value = r.to; }
+  return r;
+}
+
 function renderReport() {
+  const r = renderReportHead();
   const all = visibleTx();
-  const txs = all.filter(t => monthOf(t.date) === state.month);
+  const inRange = (t, a, b) => t.date >= a && t.date <= b;
+  const txs = all.filter(t => inRange(t, r.from, r.to));
   const total = txs.reduce((s, t) => s + t.amount, 0);
-  if (!txs.length) { $('#report').innerHTML = emptyBox('這個月還沒有紀錄'); return; }
+  if (!txs.length) { $('#report').innerHTML = emptyBox(`這段期間還沒有紀錄`); return; }
 
   // 依主分類加總；展開時再看各子分類
   const sums = new Map(), subSums = new Map();
@@ -460,13 +511,42 @@ function renderReport() {
   const rows = [...sums].sort((a, b) => b[1] - a[1]);
   const max = rows[0][1];
 
-  // 日平均：本月算到今天，過去月份算整月
-  const [y, m] = state.month.split('-').map(Number);
-  const isThisMonth = state.month === monthOf(today());
-  const days = isThisMonth ? new Date().getDate() : new Date(y, m, 0).getDate();
-  const prev = all.filter(t => monthOf(t.date) === shiftMonth(state.month, -1)).reduce((s, t) => s + t.amount, 0);
-  const diff = total - prev;
-  const diffText = prev ? `比上月${diff >= 0 ? '多' : '少'} ${money(Math.abs(diff))}` : '上月沒有紀錄';
+  // 平均只算到今天（還沒到的日子、月份不算）；月、自訂期間算日平均，年、近半年算月平均
+  const t0 = today();
+  const end = r.to < t0 ? r.to : t0;
+  let avgText = '';
+  if (end >= r.from) {
+    if (r.monthly && state.range !== 'custom') {
+      const n = monthsIn(r.from, end).length;
+      avgText = `月平均 <b>${money(Math.round(total / n))}</b>`;
+    } else {
+      avgText = `日平均 <b>${money(Math.round(total / daysBetween(r.from, end)))}</b>`;
+    }
+  }
+  let diffText = `共 ${daysBetween(r.from, r.to)} 天`;
+  if (r.prev) {
+    const prev = all.filter(t => inRange(t, r.prev.from, r.prev.to)).reduce((s, t) => s + t.amount, 0);
+    const diff = total - prev;
+    diffText = prev ? `比${r.prev.name}${diff >= 0 ? '多' : '少'} ${money(Math.abs(diff))}` : `${r.prev.name}沒有紀錄`;
+  }
+
+  // 每月長條圖：點一下切到那個月
+  let monthly = '';
+  if (r.monthly) {
+    const byMonth = new Map(monthsIn(r.from, r.to).map(ym => [ym, 0]));
+    for (const t of txs) byMonth.set(monthOf(t.date), byMonth.get(monthOf(t.date)) + t.amount);
+    const list = [...byMonth];
+    const mx = Math.max(...list.map(([, v]) => v));
+    const [topYm, topV] = list.find(([, v]) => v === mx);
+    const many = list.length > 12;
+    monthly = `<h2>每月支出</h2><div class="card months">
+      <div class="months-cols">${list.map(([ym, v]) => `
+        <button data-ym="${ym}" class="${v === mx ? 'top' : ''}" aria-label="${ymLabel(ym)} ${money(v)}">
+          <i style="height:${mx ? (v / mx * 100).toFixed(1) : 0}%"></i><span>${many && Number(ym.slice(5)) !== 1 ? '' : Number(ym.slice(5))}</span>
+        </button>`).join('')}</div>
+      <div class="months-note"><span>最高 <b>${ymLabel(topYm)} ${money(topV)}</b></span><span>點長條看那個月</span></div>
+    </div>`;
+  }
 
   // 家庭帳：各成員金額
   let people = '';
@@ -485,10 +565,11 @@ function renderReport() {
   const d = donut(rows, total);
   $('#report').innerHTML = `
     <div class="card summary">
-      <small>總支出 · ${txs.length} 筆</small>
+      <small>${r.unit}總支出 · ${txs.length} 筆</small>
       <div class="summary-total">${money(total)}</div>
-      <div class="summary-sub"><span>日平均 <b>${money(Math.round(total / days))}</b></span><span>${diffText}</span></div>
+      <div class="summary-sub"><span>${avgText}</span><span>${diffText}</span></div>
     </div>
+    ${monthly}
     <div class="card chart">
       <div class="donut-wrap">${d.svg}<div class="donut-center"><small>支出</small><b>${money(total)}</b></div></div>
       <ul class="legend">${d.legend}</ul>
@@ -879,7 +960,7 @@ function renderAll() {
   if (!state.profile) return;
   if (!hasFamily()) state.filter = 'all';
   const [y, m] = state.month.split('-');
-  $$('.month-label').forEach(el => { el.textContent = `${y} 年 ${Number(m)} 月`; });
+  $('#view-list .month-label').textContent = `${y} 年 ${Number(m)} 月`;
   $$('.filter').forEach(el => { el.hidden = !hasFamily(); });
   $$('.filter button').forEach(b => b.classList.toggle('active', b.dataset.f === state.filter));
   renderAdd();
@@ -900,10 +981,29 @@ function bind() {
     const b = e.target.closest('button');
     if (b) addTx(b.dataset.cat, Number(b.dataset.amt));
   });
-  $$('.month-nav button').forEach(b => b.addEventListener('click', () => {
+  $$('#view-list .month-nav button').forEach(b => b.addEventListener('click', () => {
     state.month = shiftMonth(state.month, Number(b.dataset.m));
     renderAll();
   }));
+  // 報表期間：月、近半年一次移一個月（和明細同步）；年一次移一年
+  $$('#report-nav button').forEach(b => b.addEventListener('click', () => {
+    const d = Number(b.dataset.m);
+    if (state.range === 'year') { state.year += d; renderReport(); }
+    else { state.month = shiftMonth(state.month, d); renderAll(); }
+  }));
+  $('#range-mode').addEventListener('click', e => {
+    const r = e.target.closest('button')?.dataset.r;
+    if (!r || r === state.range) return;
+    if (r === 'year') state.year = Number(state.month.slice(0, 4));
+    if (r === 'custom' && !state.from) { state.from = `${shiftMonth(state.month, -2)}-01`; state.to = today() < lastDay(state.month) ? today() : lastDay(state.month); }
+    state.range = r;
+    renderReport();
+  });
+  $('#range-custom').addEventListener('change', () => {
+    state.from = $('#range-from').value;
+    state.to = $('#range-to').value;
+    renderReport();
+  });
   $$('.filter').forEach(el => el.addEventListener('click', e => {
     const f = e.target.dataset.f;
     if (f) { state.filter = f; renderAll(); }
@@ -920,6 +1020,8 @@ function bind() {
     if (sel) onCatMove(Number(sel.dataset.gi), Number(sel.dataset.si), Number(sel.value));
   });
   $('#report').addEventListener('click', e => {
+    const ym = e.target.closest('[data-ym]')?.dataset.ym;
+    if (ym) { state.month = ym; state.range = 'month'; renderAll(); return; }
     const g = e.target.closest('[data-grp]')?.dataset.grp;
     if (!g) return;
     if (state.open.has(g)) state.open.delete(g); else state.open.add(g);

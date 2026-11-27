@@ -71,7 +71,11 @@
   <!-- 報表 -->
   <section id="view-report" class="view">
     <div class="hero">
-      <div class="month-nav"><button data-m="-1" aria-label="上個月" data-ic="left"></button><span class="month-label"></span><button data-m="1" aria-label="下個月" data-ic="chevron"></button></div>
+      <div id="range-mode" class="seg range-seg"><button data-r="month">月</button><button data-r="year">年</button><button data-r="half">近半年</button><button data-r="custom">自訂</button></div>
+      <div id="report-nav" class="month-nav"><button data-m="-1" aria-label="往前" data-ic="left"></button><span id="report-label" class="month-label"></span><button data-m="1" aria-label="往後" data-ic="chevron"></button></div>
+      <div id="range-custom" class="range-custom" hidden>
+        <input id="range-from" type="date" aria-label="開始日期"><span>到</span><input id="range-to" type="date" aria-label="結束日期">
+      </div>
     </div>
     <div class="filter seg" hidden><button data-f="all">全部</button><button data-f="me">個人</button><button data-f="family">家庭</button></div>
     <div id="report"></div>
